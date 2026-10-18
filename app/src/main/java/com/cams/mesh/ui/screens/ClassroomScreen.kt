@@ -32,6 +32,7 @@ fun ClassroomScreen(
     onJoinClassroomClick: () -> Unit,
     onSwitchClassroomClick: (SessionEntity) -> Unit,
     onChatClick: () -> Unit,
+    onTeacherWebUploadClick: () -> Unit,
     onPasteTextClick: () -> Unit,
     onUploadFileSelected: (Uri) -> Unit,
     onMaterialClick: (String) -> Unit,
@@ -48,6 +49,9 @@ fun ClassroomScreen(
             TopAppBar(
                 title = { Text("CAMS-MESH", fontWeight = FontWeight.Bold) },
                 actions = {
+                    IconButton(onClick = onTeacherWebUploadClick) {
+                        Icon(Icons.Default.Language, contentDescription = "Teacher Web Upload")
+                    }
                     if (activeSession != null) {
                         IconButton(onClick = onChatClick) {
                             Icon(Icons.Default.Chat, contentDescription = "Classroom Chat")

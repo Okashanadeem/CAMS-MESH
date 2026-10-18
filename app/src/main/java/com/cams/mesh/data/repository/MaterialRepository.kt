@@ -64,6 +64,10 @@ class MaterialRepository(
         return entity
     }
 
+    suspend fun insertMaterialDirect(entity: MaterialEntity) {
+        materialDao.insertMaterial(entity)
+    }
+
     suspend fun createFileMaterial(
         uri: Uri,
         title: String,

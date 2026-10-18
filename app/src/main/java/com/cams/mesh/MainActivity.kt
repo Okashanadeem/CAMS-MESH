@@ -45,6 +45,30 @@ class MainActivity : ComponentActivity() {
 
                 var displayName by remember { mutableStateOf(app.nearbyMeshManager.localDisplayName) }
 
+                // Local Web Server for Teacher Upload
+                var isWebServerActive by remember { mutableStateOf(false) }
+                var webServerIp by remember { mutableStateOf("127.0.0.1") }
+                val webServerPort = 8080
+
+                val localWebServer = remember {
+                    com.cams.mesh.util.LocalWebServer(
+                        context = this@MainActivity,
+                        materialRepository = app.materialRepository,
+                        onMaterialUploaded = { uploadedMaterial ->
+                            app.nearbyMeshManager.broadcastNewMaterial(uploadedMaterial)
+                            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                Toast.makeText(this@MainActivity, "Teacher uploaded: ${uploadedMaterial.title}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    )
+                }
+
+                DisposableEffect(Unit) {
+                    onDispose {
+                        localWebServer.stop()
+                    }
+                }
+
                 // Request Permissions Launcher
                 val permissionLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestMultiplePermissions()
@@ -135,6 +159,18 @@ class MainActivity : ComponentActivity() {
                                     Toast.makeText(this@MainActivity, "Connecting to ${session.sessionName.ifEmpty { session.roomCode }}...", Toast.LENGTH_SHORT).show()
                                 },
                                 onChatClick = { navController.navigate("chat") },
+                                onTeacherWebUploadClick = {
+                                    if (!isWebServerActive) {
+                                        val port = localWebServer.start(webServerPort)
+                                        if (port > 0) {
+                                            isWebServerActive = true
+                                            webServerIp = localWebServer.getLocalIpAddress()
+                                        }
+                                    } else {
+                                        webServerIp = localWebServer.getLocalIpAddress()
+                                    }
+                                    navController.navigate("teacher_web_portal")
+                                },
                                 onPasteTextClick = { navController.navigate("paste_text") },
                                 onUploadFileSelected = { uri ->
                                     lifecycleScope.launch {
@@ -208,6 +244,27 @@ class MainActivity : ComponentActivity() {
                                     }
                                     Toast.makeText(this@MainActivity, "Joining room $code from QR...", Toast.LENGTH_SHORT).show()
                                 }
+                            )
+                        }
+
+                        composable("teacher_web_portal") {
+                            TeacherWebPortalScreen(
+                                ipAddress = webServerIp,
+                                port = webServerPort,
+                                isServerActive = isWebServerActive,
+                                onToggleServer = { active ->
+                                    if (active) {
+                                        val port = localWebServer.start(webServerPort)
+                                        if (port > 0) {
+                                            isWebServerActive = true
+                                            webServerIp = localWebServer.getLocalIpAddress()
+                                        }
+                                    } else {
+                                        localWebServer.stop()
+                                        isWebServerActive = false
+                                    }
+                                },
+                                onBackClick = { navController.popBackStack() }
                             )
                         }
 
