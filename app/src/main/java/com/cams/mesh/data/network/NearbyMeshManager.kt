@@ -48,6 +48,7 @@ class NearbyMeshManager(
 
     private val _activeSession = MutableStateFlow<SessionEntity?>(null)
     val activeSession: StateFlow<SessionEntity?> = _activeSession
+    val currentSession: SessionEntity? get() = _activeSession.value
 
     var localDeviceId: String = UUID.randomUUID().toString()
     var localDisplayName: String = "Student"
@@ -131,7 +132,7 @@ class NearbyMeshManager(
                     val peerEntity = PeerEntity(
                         deviceId = peer.deviceId.ifEmpty { endpointId },
                         displayName = peer.displayName,
-                        sessionId = activeSession?.sessionId,
+                        sessionId = currentSession?.sessionId,
                         lastSeenAt = System.currentTimeMillis(),
                         connectionState = "CONNECTED",
                         lastSuccessfulSyncAt = null
@@ -139,7 +140,7 @@ class NearbyMeshManager(
                     peerDao.insertOrUpdatePeer(peerEntity)
                     _networkStatus.value = NetworkStatus.Connected(
                         peerCount = connectedEndpoints.size,
-                        roomCode = activeSession?.roomCode ?: ""
+                        roomCode = currentSession?.roomCode ?: ""
                     )
                     // Send HELLO & request manifest
                     sendHello(endpointId)
@@ -158,7 +159,7 @@ class NearbyMeshManager(
                 }
             }
             if (connectedEndpoints.isEmpty()) {
-                val code = activeSession?.roomCode
+                val code = currentSession?.roomCode
                 if (code != null) {
                     _networkStatus.value = NetworkStatus.Advertising(code)
                 } else {
@@ -167,7 +168,7 @@ class NearbyMeshManager(
             } else {
                 _networkStatus.value = NetworkStatus.Connected(
                     peerCount = connectedEndpoints.size,
-                    roomCode = activeSession?.roomCode ?: ""
+                    roomCode = currentSession?.roomCode ?: ""
                 )
             }
         }
@@ -296,7 +297,7 @@ class NearbyMeshManager(
     private suspend fun sendHello(endpointId: String) {
         val msg = MeshMessage(
             type = "HELLO",
-            sessionId = activeSession?.sessionId ?: "",
+            sessionId = currentSession?.sessionId ?: "",
             senderDeviceId = localDeviceId,
             senderDisplayName = localDisplayName
         )
@@ -306,7 +307,7 @@ class NearbyMeshManager(
     private suspend fun requestManifest(endpointId: String) {
         val msg = MeshMessage(
             type = "MANIFEST_REQUEST",
-            sessionId = activeSession?.sessionId ?: "",
+            sessionId = currentSession?.sessionId ?: "",
             senderDeviceId = localDeviceId,
             senderDisplayName = localDisplayName
         )
@@ -328,7 +329,7 @@ class NearbyMeshManager(
         val payload = ManifestPayload(manifestItems)
         val msg = MeshMessage(
             type = "MANIFEST_RESPONSE",
-            sessionId = activeSession?.sessionId ?: "",
+            sessionId = currentSession?.sessionId ?: "",
             senderDeviceId = localDeviceId,
             senderDisplayName = localDisplayName,
             payloadJson = gson.toJson(payload)
@@ -353,7 +354,7 @@ class NearbyMeshManager(
                 // We are missing this item! Request its metadata or send an item request
                 val reqMsg = MeshMessage(
                     type = "REQUEST_ITEM",
-                    sessionId = activeSession?.sessionId ?: "",
+                    sessionId = currentSession?.sessionId ?: "",
                     senderDeviceId = localDeviceId,
                     senderDisplayName = localDisplayName,
                     payloadJson = gson.toJson(ItemRequestPayload(remoteItem.materialId))
@@ -386,7 +387,7 @@ class NearbyMeshManager(
     private suspend fun broadcastSyncRecord(record: SyncRecordPayload, excludeEndpointId: String? = null) {
         val msg = MeshMessage(
             type = "SYNC_RECORD",
-            sessionId = activeSession?.sessionId ?: "",
+            sessionId = currentSession?.sessionId ?: "",
             senderDeviceId = localDeviceId,
             senderDisplayName = localDisplayName,
             payloadJson = gson.toJson(record)
@@ -417,7 +418,7 @@ class NearbyMeshManager(
             )
             val msg = MeshMessage(
                 type = "SYNC_RECORD",
-                sessionId = activeSession?.sessionId ?: "",
+                sessionId = currentSession?.sessionId ?: "",
                 senderDeviceId = localDeviceId,
                 senderDisplayName = localDisplayName,
                 payloadJson = gson.toJson(record)
