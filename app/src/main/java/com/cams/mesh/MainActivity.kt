@@ -193,6 +193,15 @@ class MainActivity : ComponentActivity() {
                                 onLeaveClassroomClick = {
                                     app.nearbyMeshManager.stopAllNetworking()
                                     Toast.makeText(this@MainActivity, "Left classroom session", Toast.LENGTH_SHORT).show()
+                                },
+                                onDeleteSession = { sessionToDelete ->
+                                    lifecycleScope.launch {
+                                        if (activeSession?.sessionId == sessionToDelete.sessionId) {
+                                            app.nearbyMeshManager.stopAllNetworking()
+                                        }
+                                        app.database.sessionDao().deleteSession(sessionToDelete.sessionId)
+                                        Toast.makeText(this@MainActivity, "Removed ${sessionToDelete.sessionName.ifEmpty { sessionToDelete.roomCode }}", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             )
                         }

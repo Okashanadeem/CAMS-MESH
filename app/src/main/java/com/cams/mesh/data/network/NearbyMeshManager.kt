@@ -45,8 +45,10 @@ class NearbyMeshManager(
 
     // Active connections: endpointId -> Peer info
     private val connectedEndpoints = mutableMapOf<String, PeerInfo>()
-    // Tracking incoming file payloads: payloadId -> (MaterialId, TempFile)
+    // Tracking incoming file payloads: payloadId -> IncomingTransferInfo
     private val incomingFilePayloads = mutableMapOf<Long, IncomingTransferInfo>()
+    // Tracking incoming file metadata: payloadId -> FileTransferMetadataPayload
+    private val pendingFileMetadata = mutableMapOf<Long, FileTransferMetadataPayload>()
 
     private val _activeSession = MutableStateFlow<SessionEntity?>(null)
     val activeSession: StateFlow<SessionEntity?> = _activeSession
@@ -82,7 +84,19 @@ class NearbyMeshManager(
                     }
                 }
                 Payload.Type.FILE -> {
-                    // Handled upon completion or stream read
+                    val meta = pendingFileMetadata.remove(payload.id)
+                    val file = payload.asFile()?.asJavaFile()
+                    if (file != null) {
+                        val materialId = meta?.materialId ?: "incoming_${payload.id}"
+                        val fileName = meta?.originalFileName ?: "file_${payload.id}"
+                        val expectedHash = meta?.sha256Hash ?: ""
+                        incomingFilePayloads[payload.id] = IncomingTransferInfo(
+                            materialId = materialId,
+                            originalFileName = fileName,
+                            expectedHash = expectedHash,
+                            tempFile = file
+                        )
+                    }
                 }
                 Payload.Type.STREAM -> {
                     // For streaming transfers
@@ -96,12 +110,21 @@ class NearbyMeshManager(
                 if (transferInfo != null) {
                     coroutineScope.launch {
                         try {
-                            val finalFile = fileStorage.finalizeReceivedFile(
-                                transferInfo.tempFile,
-                                transferInfo.materialId,
-                                transferInfo.originalFileName,
-                                transferInfo.expectedHash
-                            )
+                            val finalFile = if (transferInfo.expectedHash.isNotEmpty()) {
+                                fileStorage.finalizeReceivedFile(
+                                    transferInfo.tempFile,
+                                    transferInfo.materialId,
+                                    transferInfo.originalFileName,
+                                    transferInfo.expectedHash
+                                )
+                            } else {
+                                val safeName = fileStorage.sanitizeFilename(transferInfo.originalFileName)
+                                val target = File(context.filesDir, "materials/${transferInfo.materialId}_$safeName")
+                                target.parentFile?.mkdirs()
+                                transferInfo.tempFile.copyTo(target, overwrite = true)
+                                transferInfo.tempFile.delete()
+                                target
+                            }
                             materialRepository.updateReceivedFilePath(
                                 transferInfo.materialId,
                                 finalFile.absolutePath
@@ -285,6 +308,12 @@ class NearbyMeshManager(
                 "SESSION_INFO" -> {
                     val info = gson.fromJson(message.payloadJson, SessionInfoPayload::class.java)
                     if (info != null) {
+                        // If we had a temporary or placeholder session for this roomCode, remove it so we don't have duplicate sessions
+                        val current = _activeSession.value
+                        if (current != null && current.roomCode == info.roomCode && current.sessionId != info.sessionId) {
+                            sessionDao.deleteSession(current.sessionId)
+                        }
+
                         val existing = sessionDao.getSessionById(info.sessionId)
                         val updated = SessionEntity(
                             sessionId = info.sessionId,
@@ -297,9 +326,14 @@ class NearbyMeshManager(
                             lastSeenAt = System.currentTimeMillis()
                         )
                         sessionDao.insertSession(updated)
-                        if (_activeSession.value == null || _activeSession.value?.roomCode == info.roomCode) {
-                            _activeSession.value = updated
-                        }
+                        _activeSession.value = updated
+                    }
+                }
+                "FILE_METADATA" -> {
+                    val meta = gson.fromJson(message.payloadJson, FileTransferMetadataPayload::class.java)
+                    if (meta != null) {
+                        // Store pending metadata mapped by materialId or payloadId
+                        pendingFileMetadata[meta.payloadId] = meta
                     }
                 }
                 "CHAT" -> {
@@ -560,7 +594,22 @@ class NearbyMeshManager(
             val file = File(material.localStoragePath)
             if (file.exists()) {
                 val filePayload = Payload.fromFile(file)
-                // Register tracking
+                val meta = FileTransferMetadataPayload(
+                    payloadId = filePayload.id,
+                    materialId = material.materialId,
+                    originalFileName = material.originalFileName ?: file.name,
+                    sha256Hash = material.sha256Hash ?: "",
+                    fileSizeBytes = material.fileSizeBytes ?: file.length()
+                )
+                val metaMsg = MeshMessage(
+                    type = "FILE_METADATA",
+                    sessionId = currentSession?.sessionId ?: "",
+                    senderDeviceId = localDeviceId,
+                    senderDisplayName = localDisplayName,
+                    payloadJson = gson.toJson(meta)
+                )
+                sendBytes(endpointId, gson.toJson(metaMsg))
+                // Send the file payload
                 connectionsClient.sendPayload(endpointId, filePayload)
             }
         }

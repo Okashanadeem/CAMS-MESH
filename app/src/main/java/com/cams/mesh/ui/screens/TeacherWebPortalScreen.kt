@@ -100,16 +100,29 @@ fun TeacherWebPortalScreen(
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = portalUrl,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
-                        ),
-                        color = MaterialTheme.colorScheme.primary,
+                    Column(
                         modifier = Modifier.padding(12.dp),
-                        textAlign = TextAlign.Center
-                    )
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = portalUrl,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            ),
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
+                        )
+                        if (!portalUrl.contains("192.168.43.1") && !portalUrl.contains("127.0.0.1")) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "If using mobile hotspot, teacher can also try: http://192.168.43.1:8080",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
 

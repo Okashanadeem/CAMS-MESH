@@ -117,33 +117,80 @@ fun MaterialDetailScreen(
                     Text("File Attachment:", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text("Filename: ${material.originalFileName ?: "unknown"}")
 
-                    Button(
-                        onClick = {
-                            if (material.localStoragePath != null) {
-                                val file = File(material.localStoragePath)
-                                if (file.exists()) {
-                                    val uri = FileProvider.getUriForFile(
-                                        context,
-                                        "${context.packageName}.fileprovider",
-                                        file
-                                    )
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = material.mimeType
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Share or open file"))
-                                } else {
-                                    Toast.makeText(context, "File does not exist on disk", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        enabled = material.localStoragePath != null,
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Open / Export File")
+                        Button(
+                            onClick = {
+                                if (material.localStoragePath != null) {
+                                    val sourceFile = File(material.localStoragePath)
+                                    if (sourceFile.exists()) {
+                                        try {
+                                            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
+                                                android.os.Environment.DIRECTORY_DOWNLOADS
+                                            )
+                                            if (!downloadsDir.exists()) {
+                                                downloadsDir.mkdirs()
+                                            }
+                                            val destName = material.originalFileName ?: sourceFile.name
+                                            var targetFile = File(downloadsDir, destName)
+                                            var count = 1
+                                            val dotIndex = destName.lastIndexOf('.')
+                                            val base = if (dotIndex > 0) destName.substring(0, dotIndex) else destName
+                                            val ext = if (dotIndex > 0) destName.substring(dotIndex) else ""
+
+                                            while (targetFile.exists()) {
+                                                targetFile = File(downloadsDir, "${base}_$count$ext")
+                                                count++
+                                            }
+
+                                            sourceFile.copyTo(targetFile, overwrite = true)
+                                            Toast.makeText(context, "Saved to Downloads: ${targetFile.name}", Toast.LENGTH_LONG).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Failed to save: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "File does not exist on disk", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            enabled = material.localStoragePath != null,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Download")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                if (material.localStoragePath != null) {
+                                    val file = File(material.localStoragePath)
+                                    if (file.exists()) {
+                                        val uri = FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            file
+                                        )
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = material.mimeType
+                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share or open file"))
+                                    } else {
+                                        Toast.makeText(context, "File does not exist on disk", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            enabled = material.localStoragePath != null,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Share")
+                        }
                     }
                 }
             }

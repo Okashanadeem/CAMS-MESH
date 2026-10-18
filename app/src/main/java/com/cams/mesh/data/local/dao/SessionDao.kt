@@ -27,6 +27,9 @@ interface SessionDao {
     @Query("DELETE FROM sessions WHERE sessionId = :sessionId")
     suspend fun deleteSession(sessionId: String)
 
+    @Query("DELETE FROM sessions WHERE roomCode = :roomCode")
+    suspend fun deleteSessionsByRoomCode(roomCode: String)
+
     @Query("DELETE FROM sessions")
     suspend fun clearAllSessions()
 }

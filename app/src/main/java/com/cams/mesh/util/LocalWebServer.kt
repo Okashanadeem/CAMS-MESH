@@ -25,7 +25,9 @@ class LocalWebServer(
     fun start(port: Int = 8080): Int {
         if (isRunning) return serverSocket?.localPort ?: port
         try {
-            val server = ServerSocket(port)
+            val server = ServerSocket()
+            server.reuseAddress = true
+            server.bind(java.net.InetSocketAddress(java.net.InetAddress.getByName("0.0.0.0"), port))
             serverSocket = server
             isRunning = true
 
@@ -60,8 +62,19 @@ class LocalWebServer(
 
     fun getLocalIpAddress(): String {
         try {
-            val interfaces = NetworkInterface.getNetworkInterfaces() ?: return "127.0.0.1"
-            for (intf in interfaces) {
+            val interfaces = NetworkInterface.getNetworkInterfaces()?.toList() ?: return "127.0.0.1"
+            
+            // Prioritize hotspot and Wi-Fi interfaces first
+            val sortedInterfaces = interfaces.sortedByDescending { intf ->
+                val name = intf.name.lowercase()
+                when {
+                    name.startsWith("ap") || name.startsWith("wlan") || name.startsWith("swlan") || name.startsWith("rndis") -> 2
+                    !intf.isLoopback && intf.isUp -> 1
+                    else -> 0
+                }
+            }
+
+            for (intf in sortedInterfaces) {
                 if (intf.isLoopback || !intf.isUp) continue
                 val addresses = intf.inetAddresses
                 for (addr in addresses) {

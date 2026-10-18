@@ -65,3 +65,11 @@ data class ChatPayload(
     val senderDisplayName: String,
     val timestamp: Long
 )
+
+data class FileTransferMetadataPayload(
+    val payloadId: Long,
+    val materialId: String,
+    val originalFileName: String,
+    val sha256Hash: String,
+    val fileSizeBytes: Long
+)

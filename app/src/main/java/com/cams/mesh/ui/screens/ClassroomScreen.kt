@@ -31,6 +31,7 @@ fun ClassroomScreen(
     onCreateClassroomClick: () -> Unit,
     onJoinClassroomClick: () -> Unit,
     onSwitchClassroomClick: (SessionEntity) -> Unit,
+    onDeleteSession: (SessionEntity) -> Unit,
     onChatClick: () -> Unit,
     onTeacherWebUploadClick: () -> Unit,
     onPasteTextClick: () -> Unit,
@@ -38,6 +39,7 @@ fun ClassroomScreen(
     onMaterialClick: (String) -> Unit,
     onLeaveClassroomClick: () -> Unit
 ) {
+    var showBigQrDialog by remember { mutableStateOf(false) }
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -124,15 +126,28 @@ fun ClassroomScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Code: ${activeSession.roomCode}",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Black
-                                )
-                                QrCodeView(
-                                    content = "cams-mesh:${activeSession.roomCode}",
-                                    modifier = Modifier.size(64.dp)
-                                )
+                                Column {
+                                    Text(
+                                        text = "Code: ${activeSession.roomCode}",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                    Text(
+                                        text = "Tap QR to enlarge",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clickable { showBigQrDialog = true }
+                                        .padding(4.dp)
+                                ) {
+                                    QrCodeView(
+                                        content = "cams-mesh:${activeSession.roomCode}",
+                                        modifier = Modifier.size(72.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -182,15 +197,28 @@ fun ClassroomScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            if (isActive) {
-                                AssistChip(
-                                    onClick = {},
-                                    label = { Text("Active") },
-                                    leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                                )
-                            } else {
-                                TextButton(onClick = { onSwitchClassroomClick(session) }) {
-                                    Text("Switch")
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isActive) {
+                                    AssistChip(
+                                        onClick = {},
+                                        label = { Text("Active") },
+                                        leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                    )
+                                } else {
+                                    TextButton(onClick = { onSwitchClassroomClick(session) }) {
+                                        Text("Switch")
+                                    }
+                                }
+                                IconButton(
+                                    onClick = { onDeleteSession(session) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.DeleteOutline,
+                                        contentDescription = "Remove Classroom",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                             }
                         }
@@ -276,6 +304,46 @@ fun ClassroomScreen(
                     )
                 }
             }
+        }
+
+        if (showBigQrDialog && activeSession != null) {
+            AlertDialog(
+                onDismissRequest = { showBigQrDialog = false },
+                title = {
+                    Text(
+                        text = activeSession.sessionName.ifEmpty { "Classroom ${activeSession.roomCode}" },
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Room Code: ${activeSession.roomCode}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        QrCodeView(
+                            content = "cams-mesh:${activeSession.roomCode}",
+                            modifier = Modifier.size(240.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Students can scan this QR code or enter code ${activeSession.roomCode} to join.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showBigQrDialog = false }) {
+                        Text("Close")
+                    }
+                }
+            )
         }
     }
 }
