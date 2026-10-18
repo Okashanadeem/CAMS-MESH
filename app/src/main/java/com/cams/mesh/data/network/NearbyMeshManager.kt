@@ -46,8 +46,8 @@ class NearbyMeshManager(
     // Tracking incoming file payloads: payloadId -> (MaterialId, TempFile)
     private val incomingFilePayloads = mutableMapOf<Long, IncomingTransferInfo>()
 
-    var activeSession: SessionEntity? = null
-        private set
+    private val _activeSession = MutableStateFlow<SessionEntity?>(null)
+    val activeSession: StateFlow<SessionEntity?> = _activeSession
 
     var localDeviceId: String = UUID.randomUUID().toString()
     var localDisplayName: String = "Student"
@@ -174,7 +174,7 @@ class NearbyMeshManager(
     }
 
     fun startAdvertisingSession(session: SessionEntity) {
-        activeSession = session
+        _activeSession.value = session
         val options = AdvertisingOptions.Builder()
             .setStrategy(Strategy.P2P_CLUSTER) // PRD: P2P Cluster mesh topology
             .build()
@@ -227,7 +227,7 @@ class NearbyMeshManager(
         connectionsClient.stopAllEndpoints()
         connectedEndpoints.clear()
         incomingFilePayloads.clear()
-        activeSession = null
+        _activeSession.value = null
         _networkStatus.value = NetworkStatus.Idle
     }
 

@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
 
                 val networkStatus by app.nearbyMeshManager.networkStatus.collectAsState()
                 val materials by app.materialRepository.getAllMaterialsFlow().collectAsState(initial = emptyList())
-                val activeSession = app.nearbyMeshManager.activeSession
+                val activeSession by app.nearbyMeshManager.activeSession.collectAsState()
 
                 var displayName by remember { mutableStateOf(app.nearbyMeshManager.localDisplayName) }
 
@@ -56,12 +56,14 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     val permissionsNeeded = mutableListOf<String>()
+                    // Location is always required by Nearby Connections for discovering and connecting peers
+                    permissionsNeeded.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    permissionsNeeded.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         permissionsNeeded.add(Manifest.permission.BLUETOOTH_SCAN)
                         permissionsNeeded.add(Manifest.permission.BLUETOOTH_ADVERTISE)
                         permissionsNeeded.add(Manifest.permission.BLUETOOTH_CONNECT)
-                    } else {
-                        permissionsNeeded.add(Manifest.permission.ACCESS_FINE_LOCATION)
                     }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         permissionsNeeded.add(Manifest.permission.NEARBY_WIFI_DEVICES)
