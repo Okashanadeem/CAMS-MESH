@@ -61,7 +61,6 @@ CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 # Determine the Java command to use to start the JVM.
 if [ -n "$JAVA_HOME" ] ; then
     if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
-        # IBM's JDK on AIX uses strange locations for the executables
         JAVACMD="$JAVA_HOME/jre/sh/java"
     else
         JAVACMD="$JAVA_HOME/bin/java"
@@ -101,33 +100,4 @@ if $darwin; then
     GRADLE_OPTS="$GRADLE_OPTS \"-Xdock:name=$APP_BASE_NAME\" \"-Xdock:icon=$APP_HOME/media/gradle.icns\""
 fi
 
-# For Cygwin or MSYS, switch paths to Windows format before running java
-if [ "$cygwin" = "true" -o "$msys" = "true" ] ; then
-    APP_HOME=`cygpath --path --mixed "$APP_HOME"`
-    CLASSPATH=`cygpath --path --mixed "$CLASSPATH"`
-    JAVACMD=`cygpath --unix "$JAVACMD"`
-
-    # We build the pattern for arguments to be converted via cygpath
-    ROOTDIRRAW=`cygpath -w "$APP_HOME"`
-    ROOTDIRRAW="'$ROOTDIRRAW'"
-    for (( i=1; i<=$#; i++ )) ; do
-        eval "arg=\$$i"
-        case "$arg" in
-          ("${ROOTDIRRAW}"*) arg=`cygpath --path --ignore --mixed "$arg"` ;;
-        esac
-        set -- "$@" "$arg"
-        shift
-    done
-fi
-
-# Escape application args
-save () {
-    for i do printf %s\\n "$i" | sed "s/'/'\\\\''/g;1s/^/'/;\$s/\$/' \\\\/" ; done
-    echo " "
-}
-APP_ARGS=`save "$@"`
-
-# Collect all arguments for the java command, following the shell quoting and substitution rules
-eval set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS "\"-Dorg.gradle.appname=$APP_BASE_NAME\"" -classpath "\"$CLASSPATH\"" org.gradle.wrapper.GradleWrapperMain "$APP_ARGS"
-
-exec "$JAVACMD" "$@"
+exec "$JAVACMD" $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS "-Dorg.gradle.appname=$APP_BASE_NAME" -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
