@@ -9,6 +9,9 @@ interface SessionDao {
     @Query("SELECT * FROM sessions ORDER BY createdAt DESC LIMIT 1")
     fun getActiveSessionFlow(): Flow<SessionEntity?>
 
+    @Query("SELECT * FROM sessions ORDER BY lastSeenAt DESC")
+    fun getAllSessionsFlow(): Flow<List<SessionEntity>>
+
     @Query("SELECT * FROM sessions WHERE sessionId = :sessionId LIMIT 1")
     suspend fun getSessionById(sessionId: String): SessionEntity?
 

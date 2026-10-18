@@ -48,3 +48,20 @@ data class TombstonePayload(
     val deletedByDeviceId: String,
     val createdAt: Long
 )
+
+data class SessionInfoPayload(
+    val sessionId: String,
+    val roomCode: String,
+    val sessionName: String,
+    val creatorDeviceId: String,
+    val approvalMode: Boolean
+)
+
+data class ChatPayload(
+    val messageId: String,
+    val sessionId: String,
+    val text: String,
+    val senderDeviceId: String,
+    val senderDisplayName: String,
+    val timestamp: Long
+)

@@ -81,8 +81,16 @@ dependencies {
     // Google Play Services Nearby Connections
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
 
-    // QR Code generation (ZXing)
+    // QR Code generation & scanning
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+
+    // CameraX for modern in-app QR scanner
+    val cameraxVersion = "1.3.2"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
 
     // JSON serialization
     implementation("com.google.code.gson:gson:2.10.1")

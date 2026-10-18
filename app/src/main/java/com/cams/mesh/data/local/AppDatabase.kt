@@ -13,9 +13,10 @@ import com.cams.mesh.data.local.entity.*
         SessionEntity::class,
         PeerEntity::class,
         TransferEntity::class,
-        TombstoneEntity::class
+        TombstoneEntity::class,
+        ChatMessageEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -24,6 +25,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun peerDao(): PeerDao
     abstract fun transferDao(): TransferDao
     abstract fun tombstoneDao(): TombstoneDao
+    abstract fun chatDao(): ChatDao
 
     companion object {
         @Volatile

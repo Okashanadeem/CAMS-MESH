@@ -3,6 +3,7 @@ package com.cams.mesh.ui.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,10 +25,13 @@ import com.cams.mesh.ui.components.QrCodeView
 @Composable
 fun ClassroomScreen(
     activeSession: SessionEntity?,
+    joinedClassrooms: List<SessionEntity>,
     networkStatus: NetworkStatus,
     recentMaterials: List<MaterialEntity>,
     onCreateClassroomClick: () -> Unit,
     onJoinClassroomClick: () -> Unit,
+    onSwitchClassroomClick: (SessionEntity) -> Unit,
+    onChatClick: () -> Unit,
     onPasteTextClick: () -> Unit,
     onUploadFileSelected: (Uri) -> Unit,
     onMaterialClick: (String) -> Unit,
@@ -45,6 +49,9 @@ fun ClassroomScreen(
                 title = { Text("CAMS-MESH", fontWeight = FontWeight.Bold) },
                 actions = {
                     if (activeSession != null) {
+                        IconButton(onClick = onChatClick) {
+                            Icon(Icons.Default.Chat, contentDescription = "Classroom Chat")
+                        }
                         IconButton(onClick = onLeaveClassroomClick) {
                             Icon(Icons.Default.ExitToApp, contentDescription = "Leave Classroom")
                         }
@@ -69,12 +76,29 @@ fun ClassroomScreen(
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = if (activeSession != null) "Classroom: ${activeSession.sessionName.ifEmpty { "Active Room" }}" else "Not in Classroom",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (activeSession != null) "Classroom: ${activeSession.sessionName.ifEmpty { "Active Room" }}" else "Not in Classroom",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (activeSession != null) {
+                                FilledTonalButton(
+                                    onClick = onChatClick,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Chat")
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         val statusText = when (networkStatus) {
                             is NetworkStatus.Idle -> "Offline"
@@ -111,36 +135,97 @@ fun ClassroomScreen(
                 }
             }
 
-            // Action Buttons
-            item {
-                if (activeSession == null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+            // Joined Classrooms list (switching & joining multiple classrooms)
+            if (joinedClassrooms.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Joined Classrooms",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                items(joinedClassrooms) { session ->
+                    val isActive = session.sessionId == activeSession?.sessionId
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSwitchClassroomClick(session) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isActive) {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            }
+                        )
                     ) {
-                        Button(
-                            onClick = onCreateClassroomClick,
-                            modifier = Modifier.weight(1f)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Create")
-                        }
-                        OutlinedButton(
-                            onClick = onJoinClassroomClick,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.GroupAdd, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Join")
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = session.sessionName.ifEmpty { "Classroom ${session.roomCode}" },
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Room Code: ${session.roomCode}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (isActive) {
+                                AssistChip(
+                                    onClick = {},
+                                    label = { Text("Active") },
+                                    leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                )
+                            } else {
+                                TextButton(onClick = { onSwitchClassroomClick(session) }) {
+                                    Text("Switch")
+                                }
+                            }
                         }
                     }
-                } else {
+                }
+            }
+
+            // Action Buttons
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = onCreateClassroomClick,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Create")
+                    }
+                    OutlinedButton(
+                        onClick = onJoinClassroomClick,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.GroupAdd, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Join Room")
+                    }
+                }
+            }
+
+            if (activeSession != null) {
+                item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Button(
+                        FilledTonalButton(
                             onClick = {
                                 filePickerLauncher.launch(arrayOf("*/*"))
                             },
@@ -150,7 +235,7 @@ fun ClassroomScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Upload File")
                         }
-                        Button(
+                        FilledTonalButton(
                             onClick = onPasteTextClick,
                             modifier = Modifier.weight(1f)
                         ) {

@@ -3,6 +3,7 @@ package com.cams.mesh.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -12,7 +13,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun JoinClassroomScreen(
     onBackClick: () -> Unit,
-    onJoinWithCode: (String) -> Unit
+    onJoinWithCode: (String) -> Unit,
+    onScanQrClick: () -> Unit
 ) {
     var roomCode by remember { mutableStateOf("") }
 
@@ -23,6 +25,11 @@ fun JoinClassroomScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onScanQrClick) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR Code")
                     }
                 }
             )
@@ -35,8 +42,19 @@ fun JoinClassroomScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            OutlinedButton(
+                onClick = onScanQrClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Scan Classroom QR Code")
+            }
+
+            HorizontalDivider()
+
             Text(
-                text = "Enter 6-character room code:",
+                text = "Or enter 6-character room code:",
                 style = MaterialTheme.typography.bodyLarge
             )
 

@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
                 val networkStatus by app.nearbyMeshManager.networkStatus.collectAsState()
                 val materials by app.materialRepository.getAllMaterialsFlow().collectAsState(initial = emptyList())
                 val activeSession by app.nearbyMeshManager.activeSession.collectAsState()
+                val joinedClassrooms by app.database.sessionDao().getAllSessionsFlow().collectAsState(initial = emptyList())
 
                 var displayName by remember { mutableStateOf(app.nearbyMeshManager.localDisplayName) }
 
@@ -123,10 +124,17 @@ class MainActivity : ComponentActivity() {
                         composable("classroom") {
                             ClassroomScreen(
                                 activeSession = activeSession,
+                                joinedClassrooms = joinedClassrooms,
                                 networkStatus = networkStatus,
                                 recentMaterials = materials.take(10),
                                 onCreateClassroomClick = { navController.navigate("create_classroom") },
                                 onJoinClassroomClick = { navController.navigate("join_classroom") },
+                                onSwitchClassroomClick = { session ->
+                                    app.nearbyMeshManager.stopAllNetworking()
+                                    app.nearbyMeshManager.startDiscoverySession(session.roomCode)
+                                    Toast.makeText(this@MainActivity, "Connecting to ${session.sessionName.ifEmpty { session.roomCode }}...", Toast.LENGTH_SHORT).show()
+                                },
+                                onChatClick = { navController.navigate("chat") },
                                 onPasteTextClick = { navController.navigate("paste_text") },
                                 onUploadFileSelected = { uri ->
                                     lifecycleScope.launch {
@@ -168,6 +176,9 @@ class MainActivity : ComponentActivity() {
                                         approvalMode = approvalMode,
                                         lastSeenAt = System.currentTimeMillis()
                                     )
+                                    lifecycleScope.launch {
+                                        app.database.sessionDao().insertSession(session)
+                                    }
                                     app.nearbyMeshManager.startAdvertisingSession(session)
                                     navController.popBackStack()
                                 }
@@ -180,6 +191,41 @@ class MainActivity : ComponentActivity() {
                                 onJoinWithCode = { code ->
                                     app.nearbyMeshManager.startDiscoverySession(code)
                                     navController.popBackStack()
+                                },
+                                onScanQrClick = {
+                                    navController.navigate("scan_qr")
+                                }
+                            )
+                        }
+
+                        composable("scan_qr") {
+                            QrScanScreen(
+                                onBackClick = { navController.popBackStack() },
+                                onQrCodeScanned = { code ->
+                                    app.nearbyMeshManager.startDiscoverySession(code)
+                                    navController.navigate("classroom") {
+                                        popUpTo("classroom") { inclusive = true }
+                                    }
+                                    Toast.makeText(this@MainActivity, "Joining room $code from QR...", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+
+                        composable("chat") {
+                            val session = activeSession
+                            val chatMessages by if (session != null) {
+                                app.database.chatDao().getMessagesForSessionFlow(session.sessionId).collectAsState(initial = emptyList())
+                            } else {
+                                remember { mutableStateOf(emptyList()) }
+                            }
+
+                            ClassroomChatScreen(
+                                roomName = session?.sessionName ?: "",
+                                roomCode = session?.roomCode ?: "",
+                                messages = chatMessages,
+                                onBackClick = { navController.popBackStack() },
+                                onSendMessage = { text ->
+                                    app.nearbyMeshManager.sendChatMessage(text)
                                 }
                             )
                         }

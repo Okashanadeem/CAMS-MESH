@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import com.cams.mesh.data.local.AppDatabase
+import com.cams.mesh.data.local.entity.ChatMessageEntity
 import com.cams.mesh.data.local.entity.PeerEntity
 import com.cams.mesh.data.local.entity.SessionEntity
 import com.cams.mesh.data.network.protocol.*
@@ -37,6 +38,7 @@ class NearbyMeshManager(
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val peerDao = AppDatabase.getInstance(context).peerDao()
     private val sessionDao = AppDatabase.getInstance(context).sessionDao()
+    private val chatDao = AppDatabase.getInstance(context).chatDao()
 
     private val _networkStatus = MutableStateFlow<NetworkStatus>(NetworkStatus.Idle)
     val networkStatus: StateFlow<NetworkStatus> = _networkStatus
@@ -194,6 +196,22 @@ class NearbyMeshManager(
     }
 
     fun startDiscoverySession(roomCode: String) {
+        coroutineScope.launch {
+            val existing = sessionDao.getSessionByRoomCode(roomCode)
+            val session = existing ?: SessionEntity(
+                sessionId = UUID.randomUUID().toString(),
+                roomCode = roomCode,
+                sessionName = "Classroom $roomCode",
+                creatorDeviceId = "remote",
+                createdAt = System.currentTimeMillis(),
+                sessionState = "ACTIVE",
+                approvalMode = false,
+                lastSeenAt = System.currentTimeMillis()
+            )
+            sessionDao.insertSession(session)
+            _activeSession.value = session
+        }
+
         val options = DiscoveryOptions.Builder()
             .setStrategy(Strategy.P2P_CLUSTER)
             .build()
@@ -242,8 +260,64 @@ class NearbyMeshManager(
         coroutineScope.launch {
             when (message.type) {
                 "HELLO" -> {
+                    // Send active session info if we have one
+                    val session = currentSession
+                    if (session != null) {
+                        val sessionInfo = SessionInfoPayload(
+                            sessionId = session.sessionId,
+                            roomCode = session.roomCode,
+                            sessionName = session.sessionName,
+                            creatorDeviceId = session.creatorDeviceId,
+                            approvalMode = session.approvalMode
+                        )
+                        val msg = MeshMessage(
+                            type = "SESSION_INFO",
+                            sessionId = session.sessionId,
+                            senderDeviceId = localDeviceId,
+                            senderDisplayName = localDisplayName,
+                            payloadJson = gson.toJson(sessionInfo)
+                        )
+                        sendBytes(fromEndpointId, gson.toJson(msg))
+                    }
                     // Reply with our manifest to initiate bidirectional sync
                     sendManifest(fromEndpointId)
+                }
+                "SESSION_INFO" -> {
+                    val info = gson.fromJson(message.payloadJson, SessionInfoPayload::class.java)
+                    if (info != null) {
+                        val existing = sessionDao.getSessionById(info.sessionId)
+                        val updated = SessionEntity(
+                            sessionId = info.sessionId,
+                            roomCode = info.roomCode,
+                            sessionName = info.sessionName,
+                            creatorDeviceId = info.creatorDeviceId,
+                            createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+                            sessionState = "ACTIVE",
+                            approvalMode = info.approvalMode,
+                            lastSeenAt = System.currentTimeMillis()
+                        )
+                        sessionDao.insertSession(updated)
+                        if (_activeSession.value == null || _activeSession.value?.roomCode == info.roomCode) {
+                            _activeSession.value = updated
+                        }
+                    }
+                }
+                "CHAT" -> {
+                    val chat = gson.fromJson(message.payloadJson, ChatPayload::class.java)
+                    if (chat != null) {
+                        val entity = ChatMessageEntity(
+                            messageId = chat.messageId,
+                            sessionId = chat.sessionId,
+                            senderDeviceId = chat.senderDeviceId,
+                            senderDisplayName = chat.senderDisplayName,
+                            text = chat.text,
+                            timestamp = chat.timestamp,
+                            isFromMe = chat.senderDeviceId == localDeviceId
+                        )
+                        chatDao.insertMessage(entity)
+                        // Relay chat to other connected peers in mesh
+                        broadcastChatMessage(chat, excludeEndpointId = fromEndpointId)
+                    }
                 }
                 "MANIFEST_REQUEST" -> {
                     sendManifest(fromEndpointId)
@@ -294,7 +368,65 @@ class NearbyMeshManager(
         }
     }
 
+    fun sendChatMessage(text: String) {
+        val session = currentSession ?: return
+        val chatPayload = ChatPayload(
+            messageId = UUID.randomUUID().toString(),
+            sessionId = session.sessionId,
+            text = text,
+            senderDeviceId = localDeviceId,
+            senderDisplayName = localDisplayName,
+            timestamp = System.currentTimeMillis()
+        )
+        coroutineScope.launch {
+            val entity = ChatMessageEntity(
+                messageId = chatPayload.messageId,
+                sessionId = chatPayload.sessionId,
+                senderDeviceId = chatPayload.senderDeviceId,
+                senderDisplayName = chatPayload.senderDisplayName,
+                text = chatPayload.text,
+                timestamp = chatPayload.timestamp,
+                isFromMe = true
+            )
+            chatDao.insertMessage(entity)
+            broadcastChatMessage(chatPayload)
+        }
+    }
+
+    private suspend fun broadcastChatMessage(chat: ChatPayload, excludeEndpointId: String? = null) {
+        val msg = MeshMessage(
+            type = "CHAT",
+            sessionId = chat.sessionId,
+            senderDeviceId = chat.senderDeviceId,
+            senderDisplayName = chat.senderDisplayName,
+            payloadJson = gson.toJson(chat)
+        )
+        val json = gson.toJson(msg)
+        connectedEndpoints.keys.filter { it != excludeEndpointId }.forEach { endpointId ->
+            sendBytes(endpointId, json)
+        }
+    }
+
     private suspend fun sendHello(endpointId: String) {
+        val session = currentSession
+        if (session != null) {
+            val sessionInfo = SessionInfoPayload(
+                sessionId = session.sessionId,
+                roomCode = session.roomCode,
+                sessionName = session.sessionName,
+                creatorDeviceId = session.creatorDeviceId,
+                approvalMode = session.approvalMode
+            )
+            val infoMsg = MeshMessage(
+                type = "SESSION_INFO",
+                sessionId = session.sessionId,
+                senderDeviceId = localDeviceId,
+                senderDisplayName = localDisplayName,
+                payloadJson = gson.toJson(sessionInfo)
+            )
+            sendBytes(endpointId, gson.toJson(infoMsg))
+        }
+
         val msg = MeshMessage(
             type = "HELLO",
             sessionId = currentSession?.sessionId ?: "",
