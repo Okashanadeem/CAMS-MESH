@@ -749,8 +749,8 @@ class LocalWebServer(
             .replace("'", "&#39;")
     }
 
-    private fun formatFileSize(bytes: Long): String {
-        if (bytes <= 0) return "0 B"
+    private fun formatFileSize(bytes: Long?): String {
+        if (bytes == null || bytes <= 0L) return "0 B"
         val units = arrayOf("B", "KB", "MB", "GB")
         val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
         val index = digitGroups.coerceIn(0, units.size - 1)
