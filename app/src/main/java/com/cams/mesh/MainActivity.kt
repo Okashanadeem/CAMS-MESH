@@ -59,6 +59,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun isLocationServiceEnabled(): Boolean {
+        val locationManager = getSystemService(android.content.Context.LOCATION_SERVICE) as? android.location.LocationManager
+        return locationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) == true ||
+                locationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
+    }
+
+    private fun isBluetoothEnabled(): Boolean {
+        val bluetoothManager = getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+        return bluetoothManager?.adapter?.isEnabled == true
+    }
+
     private fun getMissingPermissions(): List<String> {
         return getRequiredPermissions().filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -108,8 +119,11 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Permission State & Rationales
+                // Permission & Hardware Service State & Rationales
                 var showPermissionDialog by remember { mutableStateOf(false) }
+                var showHardwareServiceDialog by remember { mutableStateOf(false) }
+                var hardwareServiceDialogMessage by remember { mutableStateOf("") }
+                var hardwareServiceSettingAction by remember { mutableStateOf(Settings.ACTION_LOCATION_SOURCE_SETTINGS) }
                 var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
                 val permissionLauncher = rememberLauncherForActivityResult(
@@ -127,12 +141,29 @@ class MainActivity : ComponentActivity() {
 
                 fun executeWithPermissionCheck(action: () -> Unit) {
                     val missing = getMissingPermissions()
-                    if (missing.isEmpty()) {
-                        action()
-                    } else {
+                    if (missing.isNotEmpty()) {
                         pendingAction = action
                         permissionLauncher.launch(missing.toTypedArray())
+                        return
                     }
+
+                    // Check if Bluetooth is turned on in hardware
+                    if (!isBluetoothEnabled()) {
+                        hardwareServiceDialogMessage = "Bluetooth is currently turned OFF. Nearby peer-to-peer mesh requires Bluetooth to connect with peers."
+                        hardwareServiceSettingAction = Settings.ACTION_BLUETOOTH_SETTINGS
+                        showHardwareServiceDialog = true
+                        return
+                    }
+
+                    // Check if Location Service is turned on
+                    if (!isLocationServiceEnabled()) {
+                        hardwareServiceDialogMessage = "Location Services (GPS) are currently turned OFF. Android requires Location to be ON for Nearby Connections to discover peers."
+                        hardwareServiceSettingAction = Settings.ACTION_LOCATION_SOURCE_SETTINGS
+                        showHardwareServiceDialog = true
+                        return
+                    }
+
+                    action()
                 }
 
                 LaunchedEffect(Unit) {
@@ -181,6 +212,34 @@ class MainActivity : ComponentActivity() {
                                 OutlinedButton(onClick = { showPermissionDialog = false }) {
                                     Text("Cancel")
                                 }
+                            }
+                        }
+                    )
+                }
+
+                if (showHardwareServiceDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showHardwareServiceDialog = false },
+                        icon = { Icon(Icons.Default.SettingsBluetooth, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                        title = { Text("Turn On Device Services") },
+                        text = { Text(hardwareServiceDialogMessage) },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showHardwareServiceDialog = false
+                                    try {
+                                        startActivity(Intent(hardwareServiceSettingAction))
+                                    } catch (e: Exception) {
+                                        startActivity(Intent(Settings.ACTION_SETTINGS))
+                                    }
+                                }
+                            ) {
+                                Text("Turn On in Settings")
+                            }
+                        },
+                        dismissButton = {
+                            OutlinedButton(onClick = { showHardwareServiceDialog = false }) {
+                                Text("Dismiss")
                             }
                         }
                     )
@@ -416,6 +475,8 @@ class MainActivity : ComponentActivity() {
                                     roomName = session.sessionName,
                                     roomCode = session.roomCode,
                                     messages = chatMessages,
+                                    peerCount = if (networkStatus is NetworkStatus.Connected) (networkStatus as NetworkStatus.Connected).peerCount else 0,
+                                    isConnected = networkStatus is NetworkStatus.Connected,
                                     onBackClick = { navController.popBackStack() },
                                     onSendMessage = { text ->
                                         app.nearbyMeshManager.sendChatMessage(text)
@@ -477,6 +538,9 @@ class MainActivity : ComponentActivity() {
                                             localDisplayName = app.nearbyMeshManager.localDisplayName
                                         )
                                         app.nearbyMeshManager.broadcastNewMaterial(material)
+                                        val myName = app.nearbyMeshManager.localDisplayName
+                                        app.nearbyMeshManager.sendChatMessage("$myName has shared a text note please view it in files")
+                                        Toast.makeText(this@MainActivity, "Text shared to room", Toast.LENGTH_SHORT).show()
                                         navController.popBackStack()
                                     }
                                 }
@@ -489,6 +553,9 @@ class MainActivity : ComponentActivity() {
                             MaterialDetailScreen(
                                 material = material,
                                 onBackClick = { navController.popBackStack() },
+                                onRequestDownload = { id ->
+                                    app.nearbyMeshManager.sendFilePayloadRequest(null, id)
+                                },
                                 onDeleteLocalCopy = { id ->
                                     lifecycleScope.launch {
                                         app.materialRepository.deleteLocalCopy(id, app.nearbyMeshManager.localDeviceId)

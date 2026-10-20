@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.cams.mesh.data.local.entity.MaterialEntity
@@ -32,6 +33,7 @@ import java.util.*
 fun MaterialDetailScreen(
     material: MaterialEntity?,
     onBackClick: () -> Unit,
+    onRequestDownload: ((String) -> Unit)? = null,
     onDeleteLocalCopy: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -40,7 +42,13 @@ fun MaterialDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(material?.title ?: "Material Details") },
+                title = {
+                    Text(
+                        text = material?.title?.ifBlank { material.originalFileName ?: "Material Details" } ?: "Material Details",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -137,6 +145,11 @@ fun MaterialDetailScreen(
                     ) {
                         Button(
                             onClick = {
+                                if (material.localStoragePath == null) {
+                                    onRequestDownload?.invoke(material.materialId)
+                                    Toast.makeText(context, "Requesting file from peers...", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
                                 if (material.localStoragePath != null) {
                                     val sourceFile = File(material.localStoragePath)
                                     if (sourceFile.exists()) {
@@ -249,12 +262,12 @@ fun MaterialDetailScreen(
                                     }
                                 }
                             },
-                            enabled = material.localStoragePath != null,
+                            enabled = true,
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(Icons.Default.Download, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Download")
+                            Text(if (material.localStoragePath != null) "Save / Open" else "Download")
                         }
 
                         OutlinedButton(

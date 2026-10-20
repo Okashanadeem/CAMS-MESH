@@ -351,8 +351,6 @@ class NearbyMeshManager(
             .setStrategy(Strategy.P2P_CLUSTER)
             .build()
 
-        // We check discovery on either private roomCode service ID or public service ID
-        val serviceId = "com.cams.mesh.$roomCode"
         val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
             override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
                 connectionsClient.requestConnection(
@@ -365,14 +363,14 @@ class NearbyMeshManager(
             override fun onEndpointLost(endpointId: String) {}
         }
 
+        // Simultaneously discover on both private room channel and public channel
         connectionsClient.startDiscovery(
-            serviceId,
+            "com.cams.mesh.$roomCode",
             endpointDiscoveryCallback,
             options
         ).addOnSuccessListener {
             _networkStatus.value = NetworkStatus.Discovering(roomCode)
         }.addOnFailureListener {
-            // Also try discovering on public service ID if targeted room is a public room
             connectionsClient.startDiscovery(
                 PUBLIC_SERVICE_ID,
                 object : EndpointDiscoveryCallback() {
@@ -400,6 +398,18 @@ class NearbyMeshManager(
                 _networkStatus.value = NetworkStatus.Error(msg)
             }
         }
+
+        // Also advertise alongside discovery so if two peers switch into the same room simultaneously,
+        // they can find each other symmetrically!
+        val advOptions = AdvertisingOptions.Builder()
+            .setStrategy(Strategy.P2P_CLUSTER)
+            .build()
+        connectionsClient.startAdvertising(
+            "$PUBLIC_PREFIX:$roomCode:${customSessionName ?: "Room"}:$localDisplayName",
+            PUBLIC_SERVICE_ID,
+            connectionLifecycleCallback,
+            advOptions
+        )
     }
 
     fun connectToDiscoveredRoom(room: DiscoveredRoom) {
@@ -545,6 +555,22 @@ class NearbyMeshManager(
                             createdAt = record.createdAt,
                             hash = record.sha256Hash
                         )
+                        // Post notification in room chat that text was shared
+                        val uploaderName = if (record.uploaderDeviceId == "external_web" || record.uploaderDeviceId == "teacher_web") {
+                            "External User"
+                        } else {
+                            record.uploaderDisplayName
+                        }
+                        val chatEntity = ChatMessageEntity(
+                            messageId = UUID.randomUUID().toString(),
+                            sessionId = message.sessionId,
+                            senderDeviceId = record.uploaderDeviceId,
+                            senderDisplayName = uploaderName,
+                            text = "$uploaderName has shared a text note please view it in files",
+                            timestamp = record.createdAt,
+                            isFromMe = false
+                        )
+                        chatDao.insertMessage(chatEntity)
                         // Relay text material to other peers who don't have it!
                         broadcastSyncRecord(record, excludeEndpointId = fromEndpointId)
                     } else if (record.contentType == "FILE") {
@@ -576,6 +602,8 @@ class NearbyMeshManager(
                             isFromMe = false
                         )
                         chatDao.insertMessage(chatEntity)
+                        // Auto-request the actual file content from the peer who sent the record
+                        sendFilePayloadRequest(fromEndpointId, record.materialId)
                     }
                 }
                 "REQUEST_ITEM" -> {
@@ -696,6 +724,24 @@ class NearbyMeshManager(
         coroutineScope.launch {
             connectedEndpoints.keys.forEach { endpointId ->
                 sendManifest(endpointId)
+            }
+        }
+    }
+
+    fun sendFilePayloadRequest(endpointId: String? = null, materialId: String) {
+        val reqMsg = MeshMessage(
+            type = "REQUEST_ITEM",
+            sessionId = currentSession?.sessionId ?: "",
+            senderDeviceId = localDeviceId,
+            senderDisplayName = localDisplayName,
+            payloadJson = gson.toJson(ItemRequestPayload(materialId))
+        )
+        val json = gson.toJson(reqMsg)
+        if (endpointId != null) {
+            sendBytes(endpointId, json)
+        } else {
+            connectedEndpoints.keys.forEach { peerEndpointId ->
+                sendBytes(peerEndpointId, json)
             }
         }
     }

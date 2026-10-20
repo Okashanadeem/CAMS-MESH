@@ -64,23 +64,25 @@ fun ClassroomScreen(
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
                         onClick = onCreateClassroomClick,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Create Room")
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Create Room", maxLines = 1, softWrap = false)
                     }
                     OutlinedButton(
                         onClick = onJoinClassroomClick,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.GroupAdd, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Join Room")
+                        Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Join Room", maxLines = 1, softWrap = false)
                     }
                 }
             }

@@ -34,6 +34,8 @@ fun ClassroomChatScreen(
     roomName: String,
     roomCode: String,
     messages: List<ChatMessageEntity>,
+    peerCount: Int = 0,
+    isConnected: Boolean = true,
     onBackClick: () -> Unit,
     onSendMessage: (String) -> Unit,
     onUploadFileClick: (Uri) -> Unit,
@@ -61,14 +63,21 @@ fun ClassroomChatScreen(
                 title = {
                     Column {
                         Text(
-                            text = if (roomName.isNotBlank()) roomName else "Classroom Chat",
+                            text = if (roomName.isNotBlank()) roomName else "Room Chat",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
+                        val statusDesc = if (isConnected) {
+                            "Room: $roomCode • $peerCount connected peer${if (peerCount != 1) "s" else ""}"
+                        } else {
+                            "Room: $roomCode • Connecting to peers..."
+                        }
                         Text(
-                            text = "Room: $roomCode",
+                            text = statusDesc,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
