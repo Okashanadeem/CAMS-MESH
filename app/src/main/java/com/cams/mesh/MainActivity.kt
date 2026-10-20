@@ -333,15 +333,23 @@ class MainActivity : ComponentActivity() {
                                 onSwitchClassroomClick = { session ->
                                     executeWithPermissionCheck {
                                         app.nearbyMeshManager.stopAllNetworking()
-                                        app.nearbyMeshManager.startDiscoverySession(session.roomCode, session.sessionName)
-                                        Toast.makeText(this@MainActivity, "Connecting to ${session.sessionName.ifEmpty { session.roomCode }}...", Toast.LENGTH_SHORT).show()
+                                        if (session.creatorDeviceId == app.nearbyMeshManager.localDeviceId) {
+                                            app.nearbyMeshManager.startAdvertisingSession(session)
+                                        } else {
+                                            app.nearbyMeshManager.startDiscoverySession(session.roomCode, session.sessionName)
+                                        }
+                                        Toast.makeText(this@MainActivity, "Switched to ${session.sessionName.ifEmpty { session.roomCode }}", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 onOpenClassroomClick = { session ->
                                     executeWithPermissionCheck {
                                         if (activeSession?.sessionId != session.sessionId) {
                                             app.nearbyMeshManager.stopAllNetworking()
-                                            app.nearbyMeshManager.startDiscoverySession(session.roomCode, session.sessionName)
+                                            if (session.creatorDeviceId == app.nearbyMeshManager.localDeviceId) {
+                                                app.nearbyMeshManager.startAdvertisingSession(session)
+                                            } else {
+                                                app.nearbyMeshManager.startDiscoverySession(session.roomCode, session.sessionName)
+                                            }
                                         }
                                         navController.navigate("chat")
                                     }

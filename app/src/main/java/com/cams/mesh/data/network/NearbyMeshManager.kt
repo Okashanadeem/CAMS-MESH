@@ -327,8 +327,11 @@ class NearbyMeshManager(
     }
 
     fun startDiscoverySession(roomCode: String, customSessionName: String? = null) {
-        // First ensure any public scanning stops
+        // First ensure any active networking stops cleanly
         connectionsClient.stopDiscovery()
+        connectionsClient.stopAdvertising()
+        connectionsClient.stopAllEndpoints()
+        connectedEndpoints.clear()
 
         coroutineScope.launch {
             val existing = sessionDao.getSessionByRoomCode(roomCode)
@@ -363,9 +366,11 @@ class NearbyMeshManager(
             override fun onEndpointLost(endpointId: String) {}
         }
 
-        // Simultaneously discover on both private room channel and public channel
+        val roomServiceId = "com.cams.mesh.$roomCode"
+
+        // Discover on room service ID
         connectionsClient.startDiscovery(
-            "com.cams.mesh.$roomCode",
+            roomServiceId,
             endpointDiscoveryCallback,
             options
         ).addOnSuccessListener {
@@ -399,14 +404,13 @@ class NearbyMeshManager(
             }
         }
 
-        // Also advertise alongside discovery so if two peers switch into the same room simultaneously,
-        // they can find each other symmetrically!
+        // Also advertise on the roomServiceId so both peers discover & advertise to each other on the exact same service ID!
         val advOptions = AdvertisingOptions.Builder()
             .setStrategy(Strategy.P2P_CLUSTER)
             .build()
         connectionsClient.startAdvertising(
-            "$PUBLIC_PREFIX:$roomCode:${customSessionName ?: "Room"}:$localDisplayName",
-            PUBLIC_SERVICE_ID,
+            localDisplayName,
+            roomServiceId,
             connectionLifecycleCallback,
             advOptions
         )
