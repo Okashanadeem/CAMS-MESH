@@ -518,11 +518,13 @@ class MainActivity : ComponentActivity() {
                                 }
                             } else {
                                 val chatMessages by app.database.chatDao().getMessagesForSessionFlow(session.sessionId).collectAsState(initial = emptyList())
+                                val roomMaterials by app.materialRepository.getMaterialsBySessionFlow(session.sessionId).collectAsState(initial = emptyList())
 
                                 ClassroomChatScreen(
                                     roomName = session.sessionName,
                                     roomCode = session.roomCode,
                                     messages = chatMessages,
+                                    roomMaterials = roomMaterials,
                                     peerCount = if (networkStatus is NetworkStatus.Connected) (networkStatus as NetworkStatus.Connected).peerCount else 0,
                                     isConnected = networkStatus is NetworkStatus.Connected,
                                     onBackClick = { navController.popBackStack() },

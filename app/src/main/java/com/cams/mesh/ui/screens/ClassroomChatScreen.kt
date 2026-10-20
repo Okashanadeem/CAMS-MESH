@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.cams.mesh.data.local.entity.ChatMessageEntity
+import com.cams.mesh.data.local.entity.MaterialEntity
+import com.cams.mesh.util.AudioPlaybackManager
 import com.cams.mesh.util.AudioRecordingManager
 import java.io.File
 import java.text.SimpleDateFormat
@@ -36,6 +38,7 @@ fun ClassroomChatScreen(
     roomName: String,
     roomCode: String,
     messages: List<ChatMessageEntity>,
+    roomMaterials: List<MaterialEntity> = emptyList(),
     peerCount: Int = 0,
     isConnected: Boolean = true,
     onBackClick: () -> Unit,
@@ -50,7 +53,20 @@ fun ClassroomChatScreen(
     val listState = rememberLazyListState()
 
     val audioRecordingManager = remember { AudioRecordingManager(context) }
+    val audioPlaybackManager = remember { AudioPlaybackManager(context) }
     var isRecordingAudio by remember { mutableStateOf(false) }
+
+    val currentlyPlayingPath by audioPlaybackManager.currentlyPlayingPath.collectAsState()
+    val isAudioPlaying by audioPlaybackManager.isPlaying.collectAsState()
+
+    DisposableEffect(Unit) {
+        onDispose {
+            if (audioRecordingManager.isRecording()) {
+                audioRecordingManager.stopRecording()?.delete()
+            }
+            audioPlaybackManager.release()
+        }
+    }
 
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -154,7 +170,25 @@ fun ClassroomChatScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(messages, key = { it.messageId }) { msg ->
-                        ChatBubble(message = msg)
+                        // Check if this message represents a shared voice recording
+                        val isVoiceNoteNotice = msg.text.contains("voice recording", ignoreCase = true) || msg.text.contains("voice note", ignoreCase = true)
+                        val matchingAudioMaterial = if (isVoiceNoteNotice) {
+                            roomMaterials.firstOrNull { mat ->
+                                val isAudioType = mat.mimeType.startsWith("audio/") || (mat.originalFileName?.endsWith(".m4a", ignoreCase = true) == true)
+                                isAudioType && mat.localStoragePath != null && File(mat.localStoragePath).exists() &&
+                                        (mat.uploaderDeviceId == msg.senderDeviceId || Math.abs(mat.createdAt - msg.timestamp) < 60000)
+                            }
+                        } else null
+
+                        ChatBubble(
+                            message = msg,
+                            audioFilePath = matchingAudioMaterial?.localStoragePath,
+                            isPlaying = matchingAudioMaterial?.localStoragePath != null &&
+                                    currentlyPlayingPath == matchingAudioMaterial.localStoragePath && isAudioPlaying,
+                            onPlayAudioToggle = { path ->
+                                audioPlaybackManager.togglePlay(path)
+                            }
+                        )
                     }
                 }
             }
@@ -245,7 +279,12 @@ fun ClassroomChatScreen(
 }
 
 @Composable
-private fun ChatBubble(message: ChatMessageEntity) {
+private fun ChatBubble(
+    message: ChatMessageEntity,
+    audioFilePath: String? = null,
+    isPlaying: Boolean = false,
+    onPlayAudioToggle: ((String) -> Unit)? = null
+) {
     val alignment = if (message.isFromMe) Alignment.End else Alignment.Start
     val bubbleColor = if (message.isFromMe) {
         MaterialTheme.colorScheme.primary
@@ -287,11 +326,50 @@ private fun ChatBubble(message: ChatMessageEntity) {
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Column {
-                Text(
-                    text = message.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = textColor
-                )
+                if (audioFilePath != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    ) {
+                        IconButton(
+                            onClick = { onPlayAudioToggle?.invoke(audioFilePath) },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(
+                                    color = if (message.isFromMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(18.dp)
+                                )
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause Voice Note" else "Play Voice Note",
+                                tint = textColor,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = if (isPlaying) "Playing voice note..." else "Voice Note",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = textColor
+                            )
+                            Text(
+                                text = "Tap to listen",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = textColor.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = message.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = textColor
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(2.dp))
                 val timeString = remember(message.timestamp) {
                     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestamp))
