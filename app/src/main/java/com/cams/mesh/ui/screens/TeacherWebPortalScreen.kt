@@ -1,16 +1,15 @@
 package com.cams.mesh.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.UploadFile
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.WifiTethering
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,11 +31,23 @@ fun TeacherWebPortalScreen(
     isServerActive: Boolean,
     externalMaterials: List<MaterialEntity>,
     onToggleServer: (Boolean) -> Unit,
+    onUploadFileToPortal: (Uri) -> Unit,
+    onPostTextToPortal: (String, String) -> Unit,
     onMaterialClick: (String) -> Unit,
     onBackClick: () -> Unit
 ) {
     val portalUrl = remember(ipAddress, port) {
         "http://$ipAddress:$port"
+    }
+
+    var showPostTextDialog by remember { mutableStateOf(false) }
+    var textTitle by remember { mutableStateOf("") }
+    var textContent by remember { mutableStateOf("") }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { onUploadFileToPortal(it) }
     }
 
     Scaffold(
@@ -140,6 +151,53 @@ fun TeacherWebPortalScreen(
                         }
                     }
                 }
+
+                // App to Portal Broadcast Controls
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Broadcast to Web Portal (2-Way)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Share files or notes directly from this phone so anyone browsing your portal can view and download them.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Broadcast File", fontSize = 13.sp)
+                                }
+                                OutlinedButton(
+                                    onClick = { showPostTextDialog = true },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.EditNote, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Post Note", fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             item {
@@ -212,5 +270,69 @@ fun TeacherWebPortalScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+
+    if (showPostTextDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showPostTextDialog = false
+                textTitle = ""
+                textContent = ""
+            },
+            title = { Text("Broadcast Note to Web Portal") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "This note will be visible to external users connected to your web portal.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = textTitle,
+                        onValueChange = { textTitle = it },
+                        label = { Text("Title (Optional)") },
+                        placeholder = { Text("e.g. Announcements, Instructions") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = textContent,
+                        onValueChange = { textContent = it },
+                        label = { Text("Note / Message") },
+                        placeholder = { Text("Enter details to broadcast...") },
+                        minLines = 3,
+                        maxLines = 6,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (textContent.isNotBlank()) {
+                            onPostTextToPortal(
+                                if (textTitle.isBlank()) "Portal Announcement" else textTitle.trim(),
+                                textContent.trim()
+                            )
+                            showPostTextDialog = false
+                            textTitle = ""
+                            textContent = ""
+                        }
+                    },
+                    enabled = textContent.isNotBlank()
+                ) {
+                    Text("Broadcast")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showPostTextDialog = false
+                    textTitle = ""
+                    textContent = ""
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

@@ -138,6 +138,8 @@ class LocalWebServer(
 
                 if (method.equals("POST", ignoreCase = true) && path.startsWith("/upload")) {
                     handlePostUpload(contentType, contentLength, input, output)
+                } else if (method.equals("GET", ignoreCase = true) && path.startsWith("/download")) {
+                    handleDownload(path, output)
                 } else {
                     servePortalHtml(output)
                 }
@@ -279,50 +281,418 @@ class LocalWebServer(
         sendResponse(output, 200, "text/html; charset=UTF-8", successHtml.toByteArray(Charsets.UTF_8))
     }
 
+    private fun handleDownload(path: String, output: OutputStream) {
+        try {
+            val query = if (path.contains("?")) path.substringAfter("?") else ""
+            val id = query.split("&")
+                .firstOrNull { it.startsWith("id=") }
+                ?.substringAfter("id=")
+                ?.trim() ?: ""
+
+            if (id.isBlank()) {
+                sendResponse(output, 400, "text/plain", "Missing id parameter".toByteArray())
+                return
+            }
+
+            kotlinx.coroutines.runBlocking {
+                val material = materialRepository.getMaterialById(id)
+                if (material == null) {
+                    sendResponse(output, 404, "text/plain", "Material not found".toByteArray())
+                    return@runBlocking
+                }
+
+                if (material.contentType == "TEXT") {
+                    val textBytes = (material.textContent ?: "").toByteArray(Charsets.UTF_8)
+                    val statusMsg = "OK"
+                    val header = "HTTP/1.1 200 $statusMsg\r\n" +
+                            "Content-Type: text/plain; charset=UTF-8\r\n" +
+                            "Content-Length: ${textBytes.size}\r\n" +
+                            "Content-Disposition: inline; filename=\"${material.title.replace("\"", "")}.txt\"\r\n" +
+                            "Connection: close\r\n\r\n"
+                    output.write(header.toByteArray(Charsets.UTF_8))
+                    output.write(textBytes)
+                    output.flush()
+                    return@runBlocking
+                }
+
+                val filePath = material.localStoragePath
+                if (filePath.isNullOrBlank()) {
+                    sendResponse(output, 404, "text/plain", "File path missing".toByteArray())
+                    return@runBlocking
+                }
+
+                val file = File(filePath)
+                if (!file.exists() || !file.canRead()) {
+                    sendResponse(output, 404, "text/plain", "File not available on disk".toByteArray())
+                    return@runBlocking
+                }
+
+                val mime = material.mimeType ?: getMimeType(material.originalFileName ?: file.name)
+                val safeFileName = (material.originalFileName ?: file.name).replace("\"", "")
+                val fileLength = file.length()
+
+                val header = "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: $mime\r\n" +
+                        "Content-Length: $fileLength\r\n" +
+                        "Content-Disposition: attachment; filename=\"$safeFileName\"\r\n" +
+                        "Connection: close\r\n\r\n"
+
+                output.write(header.toByteArray(Charsets.UTF_8))
+
+                file.inputStream().use { fileIn ->
+                    val buf = ByteArray(16384)
+                    var r: Int
+                    while (fileIn.read(buf).also { r = it } != -1) {
+                        output.write(buf, 0, r)
+                    }
+                }
+                output.flush()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            try {
+                sendResponse(output, 500, "text/plain", "Internal server error".toByteArray())
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun servePortalHtml(output: OutputStream) {
+        val activeMaterials = try {
+            kotlinx.coroutines.runBlocking {
+                materialRepository.getAllActiveMaterials()
+            }
+        } catch (_: Exception) {
+            emptyList<MaterialEntity>()
+        }
+
+        val materialsHtml = StringBuilder()
+        if (activeMaterials.isEmpty()) {
+            materialsHtml.append("""
+                <div class="empty-state">
+                    <p>No materials or notes broadcasted yet. When the host or peers share documents or notes, they will appear here in real-time.</p>
+                </div>
+            """.trimIndent())
+        } else {
+            materialsHtml.append("""<div class="material-grid">""")
+            for (m in activeMaterials) {
+                val isText = m.contentType == "TEXT"
+                val titleEscaped = escapeHtml(m.title)
+                val senderEscaped = escapeHtml(m.uploaderDisplayName)
+                val typeBadge = if (isText) "Text Note" else "File"
+                val badgeClass = if (isText) "badge-text" else "badge-file"
+
+                materialsHtml.append("""
+                    <div class="material-card">
+                        <div class="card-header">
+                            <span class="type-tag $badgeClass">$typeBadge</span>
+                            <span class="card-sender">$senderEscaped</span>
+                        </div>
+                        <h3 class="card-title">$titleEscaped</h3>
+                """.trimIndent())
+
+                if (isText && !m.textContent.isNullOrBlank()) {
+                    val preview = escapeHtml(m.textContent.take(280))
+                    val ellipsis = if (m.textContent.length > 280) "..." else ""
+                    materialsHtml.append("""
+                        <div class="card-preview">$preview$ellipsis</div>
+                        <a href="/download?id=${m.materialId}" class="btn btn-outline" download="${titleEscaped}.txt">Download Note</a>
+                    """.trimIndent())
+                } else {
+                    val sizeStr = formatFileSize(m.fileSizeBytes)
+                    val fileName = escapeHtml(m.originalFileName ?: "file")
+                    materialsHtml.append("""
+                        <div class="card-file-info">
+                            <span>$fileName</span>
+                            <span class="file-size">$sizeStr</span>
+                        </div>
+                        <a href="/download?id=${m.materialId}" class="btn btn-primary" download>Download File</a>
+                    """.trimIndent())
+                }
+
+                materialsHtml.append("</div>")
+            }
+            materialsHtml.append("</div>")
+        }
+
         val html = """
             <!DOCTYPE html>
-            <html>
+            <html lang="en">
             <head>
+                <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>External User Material Upload - CAMS-MESH</title>
+                <title>CAMS-MESH Portal</title>
                 <style>
-                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 20px; }
-                    .container { max-width: 500px; margin: 20px auto; background: white; padding: 28px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
-                    .badge { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: 12px; }
-                    h1 { font-size: 22px; margin-top: 0; color: #1e293b; }
-                    p { font-size: 14px; color: #64748b; margin-bottom: 24px; line-height: 1.4; }
-                    label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; color: #334155; }
-                    input[type="text"], textarea, input[type="file"] { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 14px; margin-bottom: 18px; outline: none; }
-                    input:focus, textarea:focus { border-color: #2563eb; }
-                    button { width: 100%; background: #2563eb; color: white; padding: 14px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-                    button:hover { background: #1d4ed8; }
+                    :root {
+                        --primary: #2563eb;
+                        --primary-hover: #1d4ed8;
+                        --bg: #f8fafc;
+                        --card-bg: #ffffff;
+                        --text: #0f172a;
+                        --text-muted: #64748b;
+                        --border: #e2e8f0;
+                    }
+                    * { box-sizing: border-box; }
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                        background: var(--bg);
+                        color: var(--text);
+                        margin: 0;
+                        padding: 16px;
+                    }
+                    .top-bar {
+                        max-width: 900px;
+                        margin: 0 auto 20px auto;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 12px 18px;
+                        background: #ffffff;
+                        border-radius: 12px;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                    }
+                    .brand {
+                        font-weight: 800;
+                        font-size: 18px;
+                        color: var(--primary);
+                        letter-spacing: -0.5px;
+                    }
+                    .brand-credit {
+                        font-size: 11px;
+                        color: var(--text-muted);
+                        display: block;
+                    }
+                    .mesh-badge {
+                        background: #dbeafe;
+                        color: #1e40af;
+                        padding: 4px 10px;
+                        border-radius: 20px;
+                        font-size: 12px;
+                        font-weight: 600;
+                    }
+                    .main-layout {
+                        max-width: 900px;
+                        margin: 0 auto;
+                        display: grid;
+                        grid-template-columns: 1fr;
+                        gap: 24px;
+                    }
+                    @media (min-width: 768px) {
+                        .main-layout {
+                            grid-template-columns: 340px 1fr;
+                        }
+                    }
+                    .panel {
+                        background: var(--card-bg);
+                        border-radius: 16px;
+                        padding: 24px;
+                        box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+                        border: 1px solid var(--border);
+                        height: fit-content;
+                    }
+                    h2 {
+                        font-size: 18px;
+                        margin: 0 0 8px 0;
+                        color: var(--text);
+                    }
+                    p.desc {
+                        font-size: 13px;
+                        color: var(--text-muted);
+                        margin-top: 0;
+                        margin-bottom: 20px;
+                        line-height: 1.4;
+                    }
+                    label {
+                        display: block;
+                        font-size: 12px;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        color: #475569;
+                        margin-bottom: 6px;
+                    }
+                    input[type="text"], textarea, input[type="file"] {
+                        width: 100%;
+                        padding: 10px 12px;
+                        border: 1px solid var(--border);
+                        border-radius: 8px;
+                        font-size: 14px;
+                        margin-bottom: 16px;
+                        outline: none;
+                        font-family: inherit;
+                        transition: border-color 0.15s;
+                    }
+                    input:focus, textarea:focus {
+                        border-color: var(--primary);
+                    }
+                    .btn {
+                        display: inline-block;
+                        text-align: center;
+                        text-decoration: none;
+                        padding: 10px 18px;
+                        border-radius: 8px;
+                        font-size: 14px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        border: none;
+                        transition: background 0.15s;
+                    }
+                    .btn-primary {
+                        background: var(--primary);
+                        color: white;
+                        width: 100%;
+                    }
+                    .btn-primary:hover {
+                        background: var(--primary-hover);
+                    }
+                    .btn-outline {
+                        background: #f1f5f9;
+                        color: #1e293b;
+                        width: 100%;
+                        border: 1px solid var(--border);
+                    }
+                    .btn-outline:hover {
+                        background: #e2e8f0;
+                    }
+                    .material-grid {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 12px;
+                    }
+                    .material-card {
+                        background: #ffffff;
+                        border: 1px solid var(--border);
+                        border-radius: 12px;
+                        padding: 16px;
+                        transition: transform 0.15s, box-shadow 0.15s;
+                    }
+                    .material-card:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+                    }
+                    .card-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 8px;
+                    }
+                    .type-tag {
+                        font-size: 11px;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        padding: 2px 8px;
+                        border-radius: 6px;
+                    }
+                    .badge-file { background: #e0f2fe; color: #0284c7; }
+                    .badge-text { background: #fef3c7; color: #d97706; }
+                    .card-sender {
+                        font-size: 12px;
+                        color: var(--text-muted);
+                    }
+                    .card-title {
+                        font-size: 16px;
+                        margin: 0 0 10px 0;
+                        word-break: break-word;
+                    }
+                    .card-preview {
+                        background: #f8fafc;
+                        padding: 10px;
+                        border-radius: 6px;
+                        font-size: 13px;
+                        color: #334155;
+                        white-space: pre-wrap;
+                        word-break: break-word;
+                        margin-bottom: 12px;
+                        border-left: 3px solid #cbd5e1;
+                    }
+                    .card-file-info {
+                        display: flex;
+                        justify-content: space-between;
+                        font-size: 13px;
+                        color: var(--text-muted);
+                        margin-bottom: 12px;
+                        word-break: break-all;
+                    }
+                    .file-size {
+                        white-space: nowrap;
+                        margin-left: 8px;
+                    }
+                    .empty-state {
+                        text-align: center;
+                        padding: 40px 20px;
+                        color: var(--text-muted);
+                        font-size: 14px;
+                    }
+                    footer {
+                        max-width: 900px;
+                        margin: 32px auto 16px auto;
+                        text-align: center;
+                        font-size: 12px;
+                        color: var(--text-muted);
+                    }
                 </style>
             </head>
             <body>
-                <div class="container">
-                    <span class="badge">Offline Mesh Network</span>
-                    <h1>External User Upload</h1>
-                    <p>No app installation required. Any file (PDF, slide, doc, picture) or text note uploaded here is instantly shared across the mesh.</p>
-                    
-                    <form action="/upload" method="post" enctype="multipart/form-data">
-                        <label for="title">Title (Optional)</label>
-                        <input type="text" id="title" name="title" placeholder="e.g. Lecture Notes">
-
-                        <label for="file">Select File</label>
-                        <input type="file" id="file" name="file">
-
-                        <label for="note">Or Paste Text / Note</label>
-                        <textarea id="note" name="note" rows="4" placeholder="Type or paste questions, instructions, or notes here..."></textarea>
-
-                        <button type="submit">Broadcast to Users</button>
-                    </form>
+                <div class="top-bar">
+                    <div>
+                        <span class="brand">CAMS-MESH</span>
+                        <span class="brand-credit">Built by OKASHA NADEEM</span>
+                    </div>
+                    <span class="mesh-badge">Two-Way Web Portal</span>
                 </div>
+
+                <div class="main-layout">
+                    <!-- Column 1: Upload / Broadcast to App -->
+                    <div class="panel">
+                        <h2>Upload to Mesh</h2>
+                        <p class="desc">Send documents, images, slides, or notes from your browser directly into the classroom mesh.</p>
+                        
+                        <form action="/upload" method="post" enctype="multipart/form-data">
+                            <label for="title">Title (Optional)</label>
+                            <input type="text" id="title" name="title" placeholder="e.g. Chapter 4 Reference">
+
+                            <label for="file">Select File</label>
+                            <input type="file" id="file" name="file">
+
+                            <label for="note">Or Enter Note / Text</label>
+                            <textarea id="note" name="note" rows="3" placeholder="Write or paste your note here..."></textarea>
+
+                            <button type="submit" class="btn btn-primary">Send to App Users</button>
+                        </form>
+                    </div>
+
+                    <!-- Column 2: Available Materials from App Users -->
+                    <div class="panel">
+                        <h2>Available Materials (${activeMaterials.size})</h2>
+                        <p class="desc">Materials shared by the host and room peers are available for direct download below:</p>
+                        $materialsHtml
+                    </div>
+                </div>
+
+                <footer>
+                    CAMS-MESH an app built by OKASHA NADEEM &bull; Decentralized Offline Classroom Mesh
+                </footer>
             </body>
             </html>
         """.trimIndent()
 
         sendResponse(output, 200, "text/html; charset=UTF-8", html.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun escapeHtml(s: String): String {
+        return s.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#39;")
+    }
+
+    private fun formatFileSize(bytes: Long): String {
+        if (bytes <= 0) return "0 B"
+        val units = arrayOf("B", "KB", "MB", "GB")
+        val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
+        val index = digitGroups.coerceIn(0, units.size - 1)
+        val value = bytes / Math.pow(1024.0, index.toDouble())
+        return String.format(java.util.Locale.US, "%.1f %s", value, units[index])
     }
 
     private fun sendResponse(output: OutputStream, status: Int, contentType: String, data: ByteArray) {

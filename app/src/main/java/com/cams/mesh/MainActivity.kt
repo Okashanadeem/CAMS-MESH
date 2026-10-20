@@ -465,6 +465,44 @@ class MainActivity : ComponentActivity() {
                                         isWebServerActive = false
                                     }
                                 },
+                                onUploadFileToPortal = { uri ->
+                                    lifecycleScope.launch {
+                                        try {
+                                            val material = app.materialRepository.createFileMaterial(
+                                                uri = uri,
+                                                title = "",
+                                                sessionId = activeSession?.sessionId,
+                                                localDeviceId = app.nearbyMeshManager.localDeviceId,
+                                                localDisplayName = app.nearbyMeshManager.localDisplayName
+                                            )
+                                            app.nearbyMeshManager.broadcastNewMaterial(material)
+                                            val myName = app.nearbyMeshManager.localDisplayName
+                                            app.nearbyMeshManager.sendChatMessage("$myName has broadcasted a file to the web portal and room")
+                                            Toast.makeText(this@MainActivity, "File broadcasted to portal & room", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, "Failed to broadcast file: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onPostTextToPortal = { title, content ->
+                                    lifecycleScope.launch {
+                                        try {
+                                            val material = app.materialRepository.createTextMaterial(
+                                                title = title,
+                                                content = content,
+                                                sessionId = activeSession?.sessionId,
+                                                localDeviceId = app.nearbyMeshManager.localDeviceId,
+                                                localDisplayName = app.nearbyMeshManager.localDisplayName
+                                            )
+                                            app.nearbyMeshManager.broadcastNewMaterial(material)
+                                            val myName = app.nearbyMeshManager.localDisplayName
+                                            app.nearbyMeshManager.sendChatMessage("$myName has broadcasted a note to the web portal and room")
+                                            Toast.makeText(this@MainActivity, "Note broadcasted to portal & room", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, "Failed to broadcast note: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
                                 onMaterialClick = { id -> navController.navigate("detail/$id") },
                                 onBackClick = { navController.popBackStack() }
                             )
