@@ -471,14 +471,11 @@ class MainActivity : ComponentActivity() {
                                             val material = app.materialRepository.createFileMaterial(
                                                 uri = uri,
                                                 title = "",
-                                                sessionId = activeSession?.sessionId,
+                                                sessionId = null, // External portal uploads are strictly isolated from any room
                                                 localDeviceId = app.nearbyMeshManager.localDeviceId,
                                                 localDisplayName = app.nearbyMeshManager.localDisplayName
                                             )
-                                            app.nearbyMeshManager.broadcastNewMaterial(material)
-                                            val myName = app.nearbyMeshManager.localDisplayName
-                                            app.nearbyMeshManager.sendChatMessage("$myName has broadcasted a file to the web portal and room")
-                                            Toast.makeText(this@MainActivity, "File broadcasted to portal & room", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(this@MainActivity, "File broadcasted to web portal", Toast.LENGTH_SHORT).show()
                                         } catch (e: Exception) {
                                             Toast.makeText(this@MainActivity, "Failed to broadcast file: ${e.message}", Toast.LENGTH_SHORT).show()
                                         }
@@ -490,14 +487,11 @@ class MainActivity : ComponentActivity() {
                                             val material = app.materialRepository.createTextMaterial(
                                                 title = title,
                                                 content = content,
-                                                sessionId = activeSession?.sessionId,
+                                                sessionId = null, // External portal uploads are strictly isolated from any room
                                                 localDeviceId = app.nearbyMeshManager.localDeviceId,
                                                 localDisplayName = app.nearbyMeshManager.localDisplayName
                                             )
-                                            app.nearbyMeshManager.broadcastNewMaterial(material)
-                                            val myName = app.nearbyMeshManager.localDisplayName
-                                            app.nearbyMeshManager.sendChatMessage("$myName has broadcasted a note to the web portal and room")
-                                            Toast.makeText(this@MainActivity, "Note broadcasted to portal & room", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(this@MainActivity, "Note broadcasted to web portal", Toast.LENGTH_SHORT).show()
                                         } catch (e: Exception) {
                                             Toast.makeText(this@MainActivity, "Failed to broadcast note: ${e.message}", Toast.LENGTH_SHORT).show()
                                         }

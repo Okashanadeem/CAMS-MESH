@@ -206,13 +206,82 @@ class LocalWebServer(
             }
         }
 
+        // Validation: Must have at least a non-empty file OR non-empty note text
+        val hasFile = fileData != null && fileData.isNotEmpty() && fileName.isNotBlank()
+        val hasText = noteText.isNotBlank()
+
+        if (!hasFile && !hasText) {
+            val errorHtml = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <title>Upload Error - CAMS-MESH</title>
+                    <style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fef2f2; color: #991b1b; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+                        .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); text-align: center; max-width: 440px; width: 100%; border: 1px solid #fecaca; }
+                        h2 { color: #dc2626; margin-top: 0; }
+                        p { color: #4b5563; font-size: 15px; line-height: 1.5; }
+                        .credit { font-weight: bold; color: #1e3a8a; margin-top: 16px; font-size: 14px; }
+                        a { display: inline-block; margin-top: 24px; background: #2563eb; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; }
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h2>Upload Incomplete</h2>
+                        <p>Please select a file to upload or enter a note/text before submitting.</p>
+                        <div class="credit">CAMS-MESH an app built by OKASHA NADEEM</div>
+                        <a href="/">Go Back to Form</a>
+                    </div>
+                </body>
+                </html>
+            """.trimIndent()
+            sendResponse(output, 400, "text/html; charset=UTF-8", errorHtml.toByteArray(Charsets.UTF_8))
+            return
+        }
+
         scope.launch {
             try {
-                if (fileData != null && fileData.isNotEmpty() && fileName.isNotBlank()) {
-                    // Save as file material
+                if (hasFile && hasText) {
+                    // Both file and description/note provided
                     val fileStorage = FileStorageManager(context)
                     val temp = File(context.cacheDir, "web_${System.currentTimeMillis()}_$fileName")
-                    temp.writeBytes(fileData)
+                    temp.writeBytes(fileData!!)
+                    val hash = HashUtil.calculateSha256(temp)
+                    val materialId = UUID.randomUUID().toString()
+                    val target = fileStorage.finalizeReceivedFile(temp, materialId, fileName, hash)
+
+                    val finalTitle = when {
+                        title.isNotBlank() && title != "External Material" -> title
+                        else -> fileName
+                    }
+
+                    val entity = MaterialEntity(
+                        materialId = materialId,
+                        sessionId = null,
+                        title = finalTitle,
+                        contentType = "FILE",
+                        mimeType = getMimeType(fileName),
+                        originalFileName = fileName,
+                        localStoragePath = target.absolutePath,
+                        textContent = noteText, // Retains note as description
+                        fileSizeBytes = fileData.size.toLong(),
+                        sha256Hash = hash,
+                        uploaderDeviceId = "external_web",
+                        uploaderDisplayName = "External User (Web Portal)",
+                        createdAt = System.currentTimeMillis(),
+                        receivedAt = System.currentTimeMillis(),
+                        isUploadedByLocalUser = true,
+                        localAvailability = "AVAILABLE",
+                        transferState = "COMPLETE"
+                    )
+                    materialRepository.insertMaterialDirect(entity)
+                    onMaterialUploaded(entity)
+                } else if (hasFile) {
+                    // Only file (with optional title)
+                    val fileStorage = FileStorageManager(context)
+                    val temp = File(context.cacheDir, "web_${System.currentTimeMillis()}_$fileName")
+                    temp.writeBytes(fileData!!)
                     val hash = HashUtil.calculateSha256(temp)
                     val materialId = UUID.randomUUID().toString()
                     val target = fileStorage.finalizeReceivedFile(temp, materialId, fileName, hash)
@@ -238,10 +307,11 @@ class LocalWebServer(
                     )
                     materialRepository.insertMaterialDirect(entity)
                     onMaterialUploaded(entity)
-                } else if (noteText.isNotBlank()) {
-                    // Save as text material
+                } else if (hasText) {
+                    // Only text note (with optional title)
+                    val finalTitle = if (title.isNotBlank() && title != "External Material") title else "Portal Note"
                     val material = materialRepository.createTextMaterial(
-                        title = title,
+                        title = finalTitle,
                         content = noteText,
                         sessionId = null,
                         localDeviceId = "external_web",
@@ -396,7 +466,7 @@ class LocalWebServer(
     private fun servePortalHtml(output: OutputStream) {
         val activeMaterials = try {
             kotlinx.coroutines.runBlocking {
-                materialRepository.getAllActiveMaterials()
+                materialRepository.getExternalMaterialsList()
             }
         } catch (_: Exception) {
             emptyList<MaterialEntity>()
@@ -727,7 +797,7 @@ class LocalWebServer(
                         <h2>Upload to Mesh</h2>
                         <p class="desc">Send documents, images, slides, or notes from your browser directly into the classroom mesh.</p>
                         
-                        <form action="/upload" method="post" enctype="multipart/form-data">
+                        <form action="/upload" method="post" enctype="multipart/form-data" onsubmit="return validateForm()">
                             <label for="title">Title (Optional)</label>
                             <input type="text" id="title" name="title" placeholder="e.g. Chapter 4 Reference">
 
@@ -739,6 +809,19 @@ class LocalWebServer(
 
                             <button type="submit" class="btn btn-primary">Send to App Users</button>
                         </form>
+                        <script>
+                            function validateForm() {
+                                var fileInput = document.getElementById('file');
+                                var noteInput = document.getElementById('note');
+                                var hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+                                var hasNote = noteInput && noteInput.value.trim().length > 0;
+                                if (!hasFile && !hasNote) {
+                                    alert('Please select a file or enter a note before sending.');
+                                    return false;
+                                }
+                                return true;
+                            }
+                        </script>
                     </div>
 
                     <!-- Column 2: Available Materials from App Users -->

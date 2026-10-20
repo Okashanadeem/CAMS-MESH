@@ -36,6 +36,8 @@ class MaterialRepository(
 
     suspend fun getAllActiveMaterials(): List<MaterialEntity> = materialDao.getAllActiveMaterials()
 
+    suspend fun getExternalMaterialsList(): List<MaterialEntity> = materialDao.getExternalMaterialsList()
+
     suspend fun createTextMaterial(
         title: String,
         content: String,

@@ -43,6 +43,9 @@ interface MaterialDao {
     @Query("SELECT * FROM materials WHERE deletedAt IS NULL")
     suspend fun getAllActiveMaterials(): List<MaterialEntity>
 
+    @Query("SELECT * FROM materials WHERE deletedAt IS NULL AND sessionId IS NULL ORDER BY createdAt DESC")
+    suspend fun getExternalMaterialsList(): List<MaterialEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMaterial(material: MaterialEntity)
 
