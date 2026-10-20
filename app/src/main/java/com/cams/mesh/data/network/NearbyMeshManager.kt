@@ -278,6 +278,26 @@ class NearbyMeshManager(
                 _networkStatus.value = NetworkStatus.Error(msg)
             }
         }
+
+        // Also start discovery as host so host can discover joining peers bidirectionally!
+        val discOptions = DiscoveryOptions.Builder()
+            .setStrategy(Strategy.P2P_CLUSTER)
+            .build()
+        connectionsClient.startDiscovery(
+            "com.cams.mesh.${session.roomCode}",
+            object : EndpointDiscoveryCallback() {
+                override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
+                    connectionsClient.requestConnection(
+                        localDisplayName,
+                        endpointId,
+                        connectionLifecycleCallback
+                    )
+                }
+
+                override fun onEndpointLost(endpointId: String) {}
+            },
+            discOptions
+        )
     }
 
     fun startPublicRoomDiscovery() {
@@ -489,6 +509,23 @@ class NearbyMeshManager(
                     }
                     // Reply with our manifest to initiate bidirectional sync
                     sendManifest(fromEndpointId)
+                    // Synchronize chat history so rejoining peers receive previous messages
+                    syncChatHistory(fromEndpointId)
+                }
+                "CHAT_HISTORY" -> {
+                    val history = gson.fromJson(message.payloadJson, ChatHistoryPayload::class.java)
+                    history?.messages?.forEach { chat ->
+                        val entity = ChatMessageEntity(
+                            messageId = chat.messageId,
+                            sessionId = chat.sessionId,
+                            senderDeviceId = chat.senderDeviceId,
+                            senderDisplayName = chat.senderDisplayName,
+                            text = chat.text,
+                            timestamp = chat.timestamp,
+                            isFromMe = chat.senderDeviceId == localDeviceId
+                        )
+                        chatDao.insertMessage(entity)
+                    }
                 }
                 "SESSION_INFO" -> {
                     val info = gson.fromJson(message.payloadJson, SessionInfoPayload::class.java)
@@ -699,6 +736,33 @@ class NearbyMeshManager(
             senderDisplayName = localDisplayName
         )
         sendBytes(endpointId, gson.toJson(msg))
+    }
+
+    private suspend fun syncChatHistory(endpointId: String) {
+        val session = currentSession ?: return
+        val localMessages = chatDao.getMessagesForSession(session.sessionId)
+        if (localMessages.isNotEmpty()) {
+            val payload = ChatHistoryPayload(
+                messages = localMessages.map {
+                    ChatPayload(
+                        messageId = it.messageId,
+                        sessionId = it.sessionId,
+                        text = it.text,
+                        senderDeviceId = it.senderDeviceId,
+                        senderDisplayName = it.senderDisplayName,
+                        timestamp = it.timestamp
+                    )
+                }
+            )
+            val msg = MeshMessage(
+                type = "CHAT_HISTORY",
+                sessionId = session.sessionId,
+                senderDeviceId = localDeviceId,
+                senderDisplayName = localDisplayName,
+                payloadJson = gson.toJson(payload)
+            )
+            sendBytes(endpointId, gson.toJson(msg))
+        }
     }
 
     private suspend fun sendManifest(endpointId: String) {

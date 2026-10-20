@@ -67,6 +67,10 @@ data class ChatPayload(
     val timestamp: Long
 )
 
+data class ChatHistoryPayload(
+    val messages: List<ChatPayload>
+)
+
 data class FileTransferMetadataPayload(
     val payloadId: Long,
     val materialId: String,
