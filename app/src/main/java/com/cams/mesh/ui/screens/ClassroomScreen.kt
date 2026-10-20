@@ -122,9 +122,28 @@ fun ClassroomScreen(
                                     )
                                     if (networkStatus is NetworkStatus.Error) {
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        com.cams.mesh.ui.components.ReportIssueButton(
-                                            errorMessage = "Room Screen Network Error:\n${networkStatus.message}"
-                                        )
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            if (networkStatus.message.contains("permission", ignoreCase = true)) {
+                                                val context = androidx.compose.ui.platform.LocalContext.current
+                                                FilledTonalButton(
+                                                    onClick = {
+                                                        val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                            data = android.net.Uri.fromParts("package", context.packageName, null)
+                                                        }
+                                                        context.startActivity(intent)
+                                                    },
+                                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Grant Permissions", style = MaterialTheme.typography.labelMedium)
+                                                }
+                                            }
+                                            com.cams.mesh.ui.components.ReportIssueButton(
+                                                errorMessage = "Room Screen Network Error:\n${networkStatus.message}"
+                                            )
+                                        }
                                     }
                                 }
 

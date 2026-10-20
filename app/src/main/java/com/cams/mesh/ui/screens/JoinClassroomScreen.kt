@@ -151,6 +151,12 @@ fun JoinClassroomScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Note: Ensure Bluetooth and Location are turned ON on your device.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }

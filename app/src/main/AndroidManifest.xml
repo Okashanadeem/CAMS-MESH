@@ -13,15 +13,22 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <!-- Android 12+ (API 31+) Bluetooth permissions -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE"
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADVERTISE"
+        android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_CONNECT"
         tools:targetApi="s" />
 
     <!-- Android 13+ (API 33+) Nearby Wi-Fi Devices permission -->
-    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
+    <uses-permission
+        android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation"
         tools:targetApi="tiramisu" />
 
     <!-- Optional Camera permission for QR scanning if supported -->
