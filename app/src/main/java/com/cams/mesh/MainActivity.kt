@@ -552,6 +552,25 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     },
+                                    onUploadAudioFile = { audioFile ->
+                                        lifecycleScope.launch {
+                                            try {
+                                                val material = app.materialRepository.createDirectFileMaterial(
+                                                    file = audioFile,
+                                                    title = "Voice Note (${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())})",
+                                                    sessionId = session.sessionId,
+                                                    localDeviceId = app.nearbyMeshManager.localDeviceId,
+                                                    localDisplayName = app.nearbyMeshManager.localDisplayName
+                                                )
+                                                app.nearbyMeshManager.broadcastNewMaterial(material)
+                                                val myName = app.nearbyMeshManager.localDisplayName
+                                                app.nearbyMeshManager.sendChatMessage("$myName has shared a voice recording please view it in files")
+                                                Toast.makeText(this@MainActivity, "Voice recording shared to room", Toast.LENGTH_SHORT).show()
+                                            } catch (e: Exception) {
+                                                Toast.makeText(this@MainActivity, "Error sharing audio: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
                                     onPasteTextClick = { navController.navigate("paste_text") },
                                     onViewRoomFilesClick = { navController.navigate("room_files/${session.sessionId}") }
                                 )

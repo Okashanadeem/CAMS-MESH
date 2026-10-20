@@ -108,6 +108,41 @@ class MaterialRepository(
         return entity
     }
 
+    suspend fun createDirectFileMaterial(
+        file: java.io.File,
+        title: String,
+        sessionId: String?,
+        localDeviceId: String,
+        localDisplayName: String
+    ): MaterialEntity {
+        val materialId = UUID.randomUUID().toString()
+        val hash = HashUtil.calculateSha256(file)
+        val finalFile = fileStorage.finalizeReceivedFile(file, materialId, file.name, hash)
+        val mimeType = fileStorage.getMimeType(finalFile.name)
+
+        val entity = MaterialEntity(
+            materialId = materialId,
+            sessionId = sessionId,
+            title = if (title.isBlank()) "Voice Note" else title,
+            contentType = "FILE",
+            mimeType = mimeType,
+            originalFileName = finalFile.name,
+            localStoragePath = finalFile.absolutePath,
+            textContent = null,
+            fileSizeBytes = finalFile.length(),
+            sha256Hash = hash,
+            uploaderDeviceId = localDeviceId,
+            uploaderDisplayName = localDisplayName,
+            createdAt = System.currentTimeMillis(),
+            receivedAt = null,
+            isUploadedByLocalUser = true,
+            localAvailability = "AVAILABLE",
+            transferState = "COMPLETE"
+        )
+        materialDao.insertMaterial(entity)
+        return entity
+    }
+
     suspend fun receiveTextMaterial(
         materialId: String,
         title: String,

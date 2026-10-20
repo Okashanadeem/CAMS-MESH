@@ -1,6 +1,9 @@
 package com.cams.mesh.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -10,21 +13,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.NoteAdd
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.cams.mesh.data.local.entity.ChatMessageEntity
+import com.cams.mesh.util.AudioRecordingManager
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -39,11 +41,40 @@ fun ClassroomChatScreen(
     onBackClick: () -> Unit,
     onSendMessage: (String) -> Unit,
     onUploadFileClick: (Uri) -> Unit,
+    onUploadAudioFile: ((File) -> Unit)? = null,
     onPasteTextClick: () -> Unit,
     onViewRoomFilesClick: () -> Unit
 ) {
+    val context = LocalContext.current
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+
+    val audioRecordingManager = remember { AudioRecordingManager(context) }
+    var isRecordingAudio by remember { mutableStateOf(false) }
+
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            val file = audioRecordingManager.startRecording()
+            if (file != null) {
+                isRecordingAudio = true
+                Toast.makeText(context, "Recording audio...", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Could not start audio recorder", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(context, "Microphone permission required for audio recording", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            if (audioRecordingManager.isRecording()) {
+                audioRecordingManager.stopRecording()?.delete()
+            }
+        }
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -147,11 +178,46 @@ fun ClassroomChatScreen(
                             Icon(Icons.Default.NoteAdd, contentDescription = "Paste Text", tint = MaterialTheme.colorScheme.primary)
                         }
 
+                        IconButton(
+                            onClick = {
+                                if (isRecordingAudio) {
+                                    val recorded = audioRecordingManager.stopRecording()
+                                    isRecordingAudio = false
+                                    if (recorded != null && onUploadAudioFile != null) {
+                                        onUploadAudioFile(recorded)
+                                        Toast.makeText(context, "Voice recording shared", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "No audio recorded", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                                    if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
+                                        val file = audioRecordingManager.startRecording()
+                                        if (file != null) {
+                                            isRecordingAudio = true
+                                            Toast.makeText(context, "Recording audio...", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Could not start recording", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else {
+                                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (isRecordingAudio) Icons.Default.Stop else Icons.Default.Mic,
+                                contentDescription = if (isRecordingAudio) "Stop Recording" else "Record Audio",
+                                tint = if (isRecordingAudio) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            )
+                        }
+
                         OutlinedTextField(
-                            value = textInput,
-                            onValueChange = { textInput = it },
+                            value = if (isRecordingAudio) "Recording voice note..." else textInput,
+                            onValueChange = { if (!isRecordingAudio) textInput = it },
                             placeholder = { Text("Type a message...") },
                             modifier = Modifier.weight(1f),
+                            enabled = !isRecordingAudio,
                             maxLines = 4,
                             shape = RoundedCornerShape(24.dp)
                         )

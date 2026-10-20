@@ -596,22 +596,6 @@ class NearbyMeshManager(
                             createdAt = record.createdAt,
                             hash = record.sha256Hash
                         )
-                        // Post notification in room chat that text was shared
-                        val uploaderName = if (record.uploaderDeviceId == "external_web" || record.uploaderDeviceId == "teacher_web") {
-                            "External User"
-                        } else {
-                            record.uploaderDisplayName
-                        }
-                        val chatEntity = ChatMessageEntity(
-                            messageId = UUID.randomUUID().toString(),
-                            sessionId = message.sessionId,
-                            senderDeviceId = record.uploaderDeviceId,
-                            senderDisplayName = uploaderName,
-                            text = "$uploaderName has shared a text note please view it in files",
-                            timestamp = record.createdAt,
-                            isFromMe = false
-                        )
-                        chatDao.insertMessage(chatEntity)
                         // Relay text material to other peers who don't have it!
                         broadcastSyncRecord(record, excludeEndpointId = fromEndpointId)
                     } else if (record.contentType == "FILE") {
@@ -627,22 +611,6 @@ class NearbyMeshManager(
                             uploaderName = record.uploaderDisplayName,
                             createdAt = record.createdAt
                         )
-                        // Post notification in room chat that file was uploaded and can be viewed in files
-                        val uploaderName = if (record.uploaderDeviceId == "external_web" || record.uploaderDeviceId == "teacher_web") {
-                            "External User"
-                        } else {
-                            record.uploaderDisplayName
-                        }
-                        val chatEntity = ChatMessageEntity(
-                            messageId = UUID.randomUUID().toString(),
-                            sessionId = message.sessionId,
-                            senderDeviceId = record.uploaderDeviceId,
-                            senderDisplayName = uploaderName,
-                            text = "$uploaderName has uploaded a file please view it in files",
-                            timestamp = record.createdAt,
-                            isFromMe = false
-                        )
-                        chatDao.insertMessage(chatEntity)
                         // Auto-request the actual file content from the peer who sent the record
                         sendFilePayloadRequest(fromEndpointId, record.materialId)
                     }

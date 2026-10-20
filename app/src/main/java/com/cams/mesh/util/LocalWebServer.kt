@@ -485,14 +485,32 @@ class LocalWebServer(
                 val isText = m.contentType == "TEXT"
                 val titleEscaped = escapeHtml(m.title)
                 val senderEscaped = escapeHtml(m.uploaderDisplayName)
-                val typeBadge = if (isText) "Text Note" else "File"
-                val badgeClass = if (isText) "badge-text" else "badge-file"
+                val isAudio = m.mimeType.startsWith("audio/") || (m.originalFileName?.endsWith(".m4a", ignoreCase = true) == true) || (m.originalFileName?.endsWith(".mp3", ignoreCase = true) == true) || (m.originalFileName?.endsWith(".aac", ignoreCase = true) == true)
+                val typeBadge = when {
+                    isAudio -> "Audio"
+                    isText -> "Text Note"
+                    else -> "File"
+                }
+                val badgeClass = when {
+                    isAudio -> "badge-audio"
+                    isText -> "badge-text"
+                    else -> "badge-file"
+                }
+
+                val dateFormatted = try {
+                    java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(m.createdAt))
+                } catch (_: Exception) {
+                    ""
+                }
 
                 materialsHtml.append("""
                     <div class="material-card">
                         <div class="card-header">
                             <span class="type-tag $badgeClass">$typeBadge</span>
-                            <span class="card-sender">$senderEscaped</span>
+                            <div class="card-header-meta">
+                                <span class="card-sender">$senderEscaped</span>
+                                <span class="card-time">$dateFormatted</span>
+                            </div>
                         </div>
                         <h3 class="card-title">$titleEscaped</h3>
                 """.trimIndent())
@@ -510,11 +528,17 @@ class LocalWebServer(
                 } else {
                     val sizeStr = formatFileSize(m.fileSizeBytes)
                     val fileName = escapeHtml(m.originalFileName ?: "file")
+                    val audioPlayerHtml = if (isAudio) {
+                        """<div style="margin-bottom: 10px;"><audio controls style="width: 100%; height: 36px;" src="/download?id=${m.materialId}"></audio></div>"""
+                    } else {
+                        ""
+                    }
                     materialsHtml.append("""
                         <div class="card-file-info">
                             <span class="file-name" title="$fileName">$fileName</span>
                             <span class="file-size">$sizeStr</span>
                         </div>
+                        $audioPlayerHtml
                         <div class="card-actions">
                             <a href="/download?id=${m.materialId}" class="btn btn-primary" download>Download File</a>
                             <a href="/delete?id=${m.materialId}" class="btn btn-danger" onclick="return confirm('Are you sure you want to remove this file?')">Remove</a>
@@ -696,6 +720,8 @@ class LocalWebServer(
                         border: 1px solid var(--border);
                         border-radius: 12px;
                         padding: 16px;
+                        overflow: hidden;
+                        max-width: 100%;
                         transition: transform 0.15s, box-shadow 0.15s;
                     }
                     .material-card:hover {
@@ -717,6 +743,13 @@ class LocalWebServer(
                     }
                     .badge-file { background: #e0f2fe; color: #0284c7; }
                     .badge-text { background: #fef3c7; color: #d97706; }
+                    .badge-audio { background: #dcfce7; color: #15803d; }
+                    .card-header-meta {
+                        display: flex;
+                        flex-direction: column;
+                        align-items: flex-end;
+                        gap: 2px;
+                    }
                     .card-sender {
                         font-size: 12px;
                         color: var(--text-muted);
@@ -724,6 +757,11 @@ class LocalWebServer(
                         white-space: nowrap;
                         overflow: hidden;
                         text-overflow: ellipsis;
+                    }
+                    .card-time {
+                        font-size: 11px;
+                        color: #94a3b8;
+                        white-space: nowrap;
                     }
                     .card-title {
                         font-size: 16px;
@@ -762,6 +800,7 @@ class LocalWebServer(
                         overflow: hidden;
                         text-overflow: ellipsis;
                         flex: 1;
+                        min-width: 0;
                     }
                     .file-size {
                         white-space: nowrap;
@@ -878,6 +917,11 @@ class LocalWebServer(
             fileName.endsWith(".txt", ignoreCase = true) -> "text/plain"
             fileName.endsWith(".docx", ignoreCase = true) || fileName.endsWith(".doc", ignoreCase = true) -> "application/msword"
             fileName.endsWith(".pptx", ignoreCase = true) || fileName.endsWith(".ppt", ignoreCase = true) -> "application/vnd.ms-powerpoint"
+            fileName.endsWith(".m4a", ignoreCase = true) -> "audio/mp4"
+            fileName.endsWith(".mp3", ignoreCase = true) -> "audio/mpeg"
+            fileName.endsWith(".aac", ignoreCase = true) -> "audio/aac"
+            fileName.endsWith(".wav", ignoreCase = true) -> "audio/wav"
+            fileName.endsWith(".ogg", ignoreCase = true) -> "audio/ogg"
             else -> "application/octet-stream"
         }
     }
