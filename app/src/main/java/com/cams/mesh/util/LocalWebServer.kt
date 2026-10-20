@@ -442,7 +442,7 @@ class LocalWebServer(
                     val fileName = escapeHtml(m.originalFileName ?: "file")
                     materialsHtml.append("""
                         <div class="card-file-info">
-                            <span>$fileName</span>
+                            <span class="file-name" title="$fileName">$fileName</span>
                             <span class="file-size">$sizeStr</span>
                         </div>
                         <div class="card-actions">
@@ -650,11 +650,17 @@ class LocalWebServer(
                     .card-sender {
                         font-size: 12px;
                         color: var(--text-muted);
+                        max-width: 140px;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
                     }
                     .card-title {
                         font-size: 16px;
                         margin: 0 0 10px 0;
-                        word-break: break-word;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
                     }
                     .card-preview {
                         background: #f8fafc;
@@ -666,18 +672,30 @@ class LocalWebServer(
                         word-break: break-word;
                         margin-bottom: 12px;
                         border-left: 3px solid #cbd5e1;
+                        max-height: 100px;
+                        overflow: hidden;
+                        display: -webkit-box;
+                        -webkit-line-clamp: 3;
+                        -webkit-box-orient: vertical;
                     }
                     .card-file-info {
                         display: flex;
                         justify-content: space-between;
+                        align-items: center;
                         font-size: 13px;
                         color: var(--text-muted);
                         margin-bottom: 12px;
-                        word-break: break-all;
+                        gap: 8px;
+                    }
+                    .file-name {
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        flex: 1;
                     }
                     .file-size {
                         white-space: nowrap;
-                        margin-left: 8px;
+                        flex-shrink: 0;
                     }
                     .empty-state {
                         text-align: center;

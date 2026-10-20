@@ -44,6 +44,7 @@ fun TeacherWebPortalScreen(
     var showPostTextDialog by remember { mutableStateOf(false) }
     var textTitle by remember { mutableStateOf("") }
     var textContent by remember { mutableStateOf("") }
+    var materialToDelete by remember { mutableStateOf<MaterialEntity?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -266,7 +267,7 @@ fun TeacherWebPortalScreen(
                             onClick = { onMaterialClick(material.materialId) }
                         )
                         IconButton(
-                            onClick = { onDeleteExternalMaterial(material.materialId) },
+                            onClick = { materialToDelete = material },
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .padding(8.dp)
@@ -346,6 +347,33 @@ fun TeacherWebPortalScreen(
                     textTitle = ""
                     textContent = ""
                 }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (materialToDelete != null) {
+        val target = materialToDelete!!
+        AlertDialog(
+            onDismissRequest = { materialToDelete = null },
+            title = { Text("Remove from Portal?") },
+            text = {
+                Text("Are you sure you want to remove \"${target.title.ifBlank { target.originalFileName ?: "this item" }}\"? It will be unlisted and deleted from your device.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteExternalMaterial(target.materialId)
+                        materialToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Remove", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { materialToDelete = null }) {
                     Text("Cancel")
                 }
             }
