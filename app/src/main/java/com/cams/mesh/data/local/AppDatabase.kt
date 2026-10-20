@@ -16,7 +16,7 @@ import com.cams.mesh.data.local.entity.*
         TombstoneEntity::class,
         ChatMessageEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

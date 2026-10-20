@@ -20,6 +20,10 @@ class MaterialRepository(
 
     fun getAllMaterialsFlow(): Flow<List<MaterialEntity>> = materialDao.getAllMaterialsFlow()
 
+    fun getMaterialsBySessionFlow(sessionId: String): Flow<List<MaterialEntity>> = materialDao.getMaterialsBySessionFlow(sessionId)
+
+    fun getExternalMaterialsFlow(): Flow<List<MaterialEntity>> = materialDao.getExternalMaterialsFlow()
+
     fun getMaterialByIdFlow(id: String): Flow<MaterialEntity?> = materialDao.getMaterialByIdFlow(id)
 
     fun getUploadedByMeFlow(): Flow<List<MaterialEntity>> = materialDao.getUploadedByMeFlow()

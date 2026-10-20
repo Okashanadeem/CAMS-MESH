@@ -9,6 +9,12 @@ interface MaterialDao {
     @Query("SELECT * FROM materials WHERE deletedAt IS NULL ORDER BY createdAt DESC")
     fun getAllMaterialsFlow(): Flow<List<MaterialEntity>>
 
+    @Query("SELECT * FROM materials WHERE deletedAt IS NULL AND sessionId = :sessionId ORDER BY createdAt DESC")
+    fun getMaterialsBySessionFlow(sessionId: String): Flow<List<MaterialEntity>>
+
+    @Query("SELECT * FROM materials WHERE deletedAt IS NULL AND sessionId IS NULL ORDER BY createdAt DESC")
+    fun getExternalMaterialsFlow(): Flow<List<MaterialEntity>>
+
     @Query("SELECT * FROM materials WHERE materialId = :materialId LIMIT 1")
     suspend fun getMaterialById(materialId: String): MaterialEntity?
 

@@ -6,19 +6,33 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     displayName: String,
+    autoFocusName: Boolean = false,
     onDisplayNameChange: (String) -> Unit,
     onClearAllData: () -> Unit
 ) {
-    var name by remember(displayName) { mutableStateOf(displayName) }
+    var textFieldValue by remember(displayName) {
+        mutableStateOf(TextFieldValue(text = displayName, selection = TextRange(displayName.length)))
+    }
     var showClearDialog by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(autoFocusName) {
+        if (autoFocusName) {
+            focusRequester.requestFocus()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -35,13 +49,15 @@ fun SettingsScreen(
             Text("Profile & Device", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
             OutlinedTextField(
-                value = name,
+                value = textFieldValue,
                 onValueChange = {
-                    name = it
-                    onDisplayNameChange(it)
+                    textFieldValue = it
+                    onDisplayNameChange(it.text)
                 },
                 label = { Text("Display Name") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
                 singleLine = true
             )
 
@@ -52,6 +68,15 @@ fun SettingsScreen(
                 text = "CAMS-MESH stores all data strictly on your device. No cloud storage or internet sync is ever used. Materials are only distributed to peers within local range.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            HorizontalDivider()
+
+            Text("Support & Help", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            com.cams.mesh.ui.components.ReportIssueButton(
+                errorMessage = "General Support Request from user: $displayName",
+                buttonText = "Report Issue / Help via WhatsApp",
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -74,7 +99,7 @@ fun SettingsScreen(
             title = { Text("Clear All Data?") },
             text = {
                 Text(
-                    "This will permanently delete locally stored materials, text notes, history, downloaded files, and local classroom data from this device. It will not automatically delete copies stored on other devices."
+                    "This will permanently delete locally stored materials, text notes, history, downloaded files, and local room data from this device. It will not automatically delete copies stored on other devices."
                 )
             },
             confirmButton = {

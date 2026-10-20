@@ -27,6 +27,7 @@ import java.util.*
 @Composable
 fun MaterialCard(
     material: MaterialEntity,
+    sessionName: String? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -42,7 +43,7 @@ fun MaterialCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             val icon = if (material.contentType == "TEXT") {
@@ -53,57 +54,71 @@ fun MaterialCard(
                 else -> Icons.Default.InsertDriveFile
             }
 
-            Icon(
-                imageVector = icon,
-                contentDescription = material.contentType,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp)
-            )
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = material.contentType,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = material.title,
+                    text = material.title.ifBlank { material.originalFileName ?: "Untitled Material" },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(modifier = Modifier.height(3.dp))
+
+                // Clean Uploader and Date row
+                val uploader = when {
+                    material.uploaderDeviceId == "external_web" || material.uploaderDeviceId == "teacher_web" -> "External User"
+                    material.uploaderDisplayName.contains("Teacher", ignoreCase = true) -> "External User"
+                    material.uploaderDisplayName.contains("Student", ignoreCase = true) -> "User"
+                    material.uploaderDisplayName.isNotBlank() -> material.uploaderDisplayName
+                    else -> "User"
+                }
+
+                val dateFormatted = remember(material.createdAt) {
+                    SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(Date(material.createdAt))
+                }
+
+                Text(
+                    text = "$uploader • $dateFormatted",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (!sessionName.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = material.uploaderDisplayName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = " • ",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    val dateFormatted = remember(material.createdAt) {
-                        SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(material.createdAt))
-                    }
-                    Text(
-                        text = dateFormatted,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Room: $sessionName",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Availability badge
-            AssistChip(
-                onClick = {},
-                label = {
-                    Text(
-                        text = if (material.isUploadedByLocalUser) "Uploaded" else "Received",
-                        fontSize = 11.sp
-                    )
-                }
+            Spacer(modifier = Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
@@ -139,5 +154,54 @@ fun QrCodeView(
             contentDescription = "Room QR Code",
             modifier = modifier
         )
+    }
+}
+
+/**
+ * Report Issue helper & UI button.
+ * Opens WhatsApp directly with a pre-filled error message.
+ */
+object ErrorReporter {
+    fun reportIssue(context: android.content.Context, errorMessage: String) {
+        try {
+            val encodedMessage = java.net.URLEncoder.encode(
+                "Hello, I encountered an issue in CAMS-MESH:\n\n$errorMessage",
+                "UTF-8"
+            )
+            val url = "https://wa.me/923412342629?text=$encodedMessage"
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(context, "Could not open WhatsApp: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
+@Composable
+fun ReportIssueButton(
+    errorMessage: String,
+    modifier: Modifier = Modifier,
+    buttonText: String = "Report Issue"
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    FilledTonalButton(
+        onClick = { ErrorReporter.reportIssue(context, errorMessage) },
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer
+        ),
+        shape = RoundedCornerShape(8.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+        modifier = modifier
+    ) {
+        Icon(
+            imageVector = Icons.Default.BugReport,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(text = buttonText, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
     }
 }

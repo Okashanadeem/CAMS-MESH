@@ -12,15 +12,15 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun CreateClassroomScreen(
     onBackClick: () -> Unit,
-    onCreateConfirm: (name: String, approvalMode: Boolean) -> Unit
+    onCreateConfirm: (name: String, isVisibleToAll: Boolean) -> Unit
 ) {
-    var classroomName by remember { mutableStateOf("") }
-    var approvalMode by remember { mutableStateOf(false) }
+    var roomName by remember { mutableStateOf("") }
+    var isVisibleToAll by remember { mutableStateOf(true) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Create Classroom") },
+                title = { Text("Create Room") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -37,39 +37,56 @@ fun CreateClassroomScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             OutlinedTextField(
-                value = classroomName,
-                onValueChange = { classroomName = it },
-                label = { Text("Classroom Name (Optional)") },
+                value = roomName,
+                onValueChange = { roomName = it },
+                label = { Text("Room Name (Optional)") },
                 placeholder = { Text("e.g. Physics 101") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column {
-                    Text("Approval Mode", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Require approval before peers can join",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                        Text(
+                            "Visible to all",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            if (isVisibleToAll)
+                                "Room is public and listed under Available Nearby Locations for users to join directly."
+                            else
+                                "Private room. Users can only join by entering the room code or scanning the QR code.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isVisibleToAll,
+                        onCheckedChange = { isVisibleToAll = it }
                     )
                 }
-                Switch(
-                    checked = approvalMode,
-                    onCheckedChange = { approvalMode = it }
-                )
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
             Button(
-                onClick = { onCreateConfirm(classroomName.trim(), approvalMode) },
+                onClick = { onCreateConfirm(roomName.trim(), isVisibleToAll) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Create Session")
+                Text("Create Room")
             }
         }
     }

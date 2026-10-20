@@ -54,7 +54,8 @@ data class SessionInfoPayload(
     val roomCode: String,
     val sessionName: String,
     val creatorDeviceId: String,
-    val approvalMode: Boolean
+    val isVisibleToAll: Boolean = true,
+    val approvalMode: Boolean = false
 )
 
 data class ChatPayload(

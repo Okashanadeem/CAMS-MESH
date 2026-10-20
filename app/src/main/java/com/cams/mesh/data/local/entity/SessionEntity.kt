@@ -12,6 +12,7 @@ data class SessionEntity(
     val creatorDeviceId: String,
     val createdAt: Long,
     val sessionState: String, // "ACTIVE", "DISCONNECTED", "ENDED"
-    val approvalMode: Boolean,
+    val isVisibleToAll: Boolean = true,
+    val approvalMode: Boolean = false,
     val lastSeenAt: Long
 )

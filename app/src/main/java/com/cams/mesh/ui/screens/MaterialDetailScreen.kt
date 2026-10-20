@@ -2,8 +2,13 @@ package com.cams.mesh.ui.screens
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.media.MediaScannerConnection
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -73,16 +78,25 @@ fun MaterialDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val uploader = when {
+                            material.uploaderDeviceId == "external_web" || material.uploaderDeviceId == "teacher_web" -> "External User"
+                            material.uploaderDisplayName.contains("Teacher", ignoreCase = true) -> "External User"
+                            material.uploaderDisplayName.contains("Student", ignoreCase = true) -> "User"
+                            material.uploaderDisplayName.isNotBlank() -> material.uploaderDisplayName
+                            else -> "User"
+                        }
                         Text("Type: ${material.contentType}", fontWeight = FontWeight.SemiBold)
-                        Text("Uploader: ${material.uploaderDisplayName}")
+                        Text("Shared By: $uploader")
                         val dateFormatted = remember(material.createdAt) {
-                            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(material.createdAt))
+                            SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(Date(material.createdAt))
                         }
                         Text("Date: $dateFormatted")
                         if (material.fileSizeBytes != null) {
                             val kb = material.fileSizeBytes / 1024
-                            Text("Size: $kb KB")
+                            val mb = kb / 1024f
+                            val sizeStr = if (mb >= 1.0f) String.format(Locale.getDefault(), "%.1f MB", mb) else "$kb KB"
+                            Text("Size: $sizeStr")
                         }
                         if (material.sha256Hash != null) {
                             Text("SHA-256: ${material.sha256Hash.take(16)}...", style = MaterialTheme.typography.bodySmall)
@@ -127,31 +141,111 @@ fun MaterialDetailScreen(
                                     val sourceFile = File(material.localStoragePath)
                                     if (sourceFile.exists()) {
                                         try {
-                                            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
-                                                android.os.Environment.DIRECTORY_DOWNLOADS
-                                            )
-                                            if (!downloadsDir.exists()) {
-                                                downloadsDir.mkdirs()
-                                            }
+                                            val isImage = material.mimeType.startsWith("image/") ||
+                                                    listOf(".jpg", ".jpeg", ".png", ".webp", ".gif").any {
+                                                        sourceFile.name.endsWith(it, ignoreCase = true)
+                                                    }
+
                                             val destName = material.originalFileName ?: sourceFile.name
-                                            var targetFile = File(downloadsDir, destName)
+
+                                            if (isImage && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                                // Save to MediaStore Images so it instantly appears in Android Gallery
+                                                val contentValues = ContentValues().apply {
+                                                    put(MediaStore.Images.Media.DISPLAY_NAME, destName)
+                                                    put(MediaStore.Images.Media.MIME_TYPE, material.mimeType.ifBlank { "image/jpeg" })
+                                                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/CAMS-MESH")
+                                                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                                                }
+                                                val resolver = context.contentResolver
+                                                val imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+                                                if (imageUri != null) {
+                                                    resolver.openOutputStream(imageUri)?.use { output ->
+                                                        sourceFile.inputStream().use { input ->
+                                                            input.copyTo(output)
+                                                        }
+                                                    }
+                                                    contentValues.clear()
+                                                    contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+                                                    resolver.update(imageUri, contentValues, null, null)
+
+                                                    Toast.makeText(context, "Saved to Gallery & Pictures", Toast.LENGTH_SHORT).show()
+
+                                                    // Open image immediately in Gallery / Viewer
+                                                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                                                        setDataAndType(imageUri, material.mimeType.ifBlank { "image/jpeg" })
+                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                    }
+                                                    context.startActivity(viewIntent)
+                                                    return@Button
+                                                }
+                                            }
+
+                                            // Fallback or non-image files (PDFs, docs, etc.) -> Save to Downloads/Pictures
+                                            val targetDir = if (isImage) {
+                                                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                                            } else {
+                                                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                                            }
+                                            if (!targetDir.exists()) {
+                                                targetDir.mkdirs()
+                                            }
+
+                                            var targetFile = File(targetDir, destName)
                                             var count = 1
                                             val dotIndex = destName.lastIndexOf('.')
                                             val base = if (dotIndex > 0) destName.substring(0, dotIndex) else destName
                                             val ext = if (dotIndex > 0) destName.substring(dotIndex) else ""
 
                                             while (targetFile.exists()) {
-                                                targetFile = File(downloadsDir, "${base}_$count$ext")
+                                                targetFile = File(targetDir, "${base}_$count$ext")
                                                 count++
                                             }
 
                                             sourceFile.copyTo(targetFile, overwrite = true)
-                                            Toast.makeText(context, "Saved to Downloads: ${targetFile.name}", Toast.LENGTH_LONG).show()
+
+                                            // Trigger Android Media Scanner so Gallery and file managers immediately discover it
+                                            MediaScannerConnection.scanFile(
+                                                context,
+                                                arrayOf(targetFile.absolutePath),
+                                                arrayOf(material.mimeType)
+                                            ) { _, _ -> }
+
+                                            val toastMsg = if (isImage) "Saved to Gallery" else "Saved to Downloads"
+                                            Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show()
+
+                                            // Immediately open the downloaded file like WhatsApp
+                                            val uri = FileProvider.getUriForFile(
+                                                context,
+                                                "${context.packageName}.fileprovider",
+                                                targetFile
+                                            )
+                                            val openIntent = Intent(Intent.ACTION_VIEW).apply {
+                                                setDataAndType(uri, material.mimeType)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            try {
+                                                context.startActivity(openIntent)
+                                            } catch (e: Exception) {
+                                                val chooser = Intent.createChooser(openIntent, "Open with")
+                                                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                context.startActivity(chooser)
+                                            }
                                         } catch (e: Exception) {
-                                            Toast.makeText(context, "Failed to save: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Failed to save file", Toast.LENGTH_SHORT).show()
+                                            com.cams.mesh.ui.components.ErrorReporter.reportIssue(
+                                                context,
+                                                "Download / Save Error for file '${material.title}': ${e.message}"
+                                            )
                                         }
                                     } else {
-                                        Toast.makeText(context, "File does not exist on disk", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "File is not downloaded locally yet", Toast.LENGTH_SHORT).show()
+                                        com.cams.mesh.ui.components.ErrorReporter.reportIssue(
+                                            context,
+                                            "File Missing on Disk for '${material.title}' (ID: ${material.materialId})"
+                                        )
                                     }
                                 }
                             },
@@ -178,7 +272,7 @@ fun MaterialDetailScreen(
                                             putExtra(Intent.EXTRA_STREAM, uri)
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                         }
-                                        context.startActivity(Intent.createChooser(shareIntent, "Share or open file"))
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share file"))
                                     } else {
                                         Toast.makeText(context, "File does not exist on disk", Toast.LENGTH_SHORT).show()
                                     }

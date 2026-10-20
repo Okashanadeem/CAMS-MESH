@@ -1,5 +1,8 @@
 package com.cams.mesh.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -8,6 +11,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,10 +35,19 @@ fun ClassroomChatScreen(
     roomCode: String,
     messages: List<ChatMessageEntity>,
     onBackClick: () -> Unit,
-    onSendMessage: (String) -> Unit
+    onSendMessage: (String) -> Unit,
+    onUploadFileClick: (Uri) -> Unit,
+    onPasteTextClick: () -> Unit,
+    onViewRoomFilesClick: () -> Unit
 ) {
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { onUploadFileClick(it) }
+    }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -60,6 +76,11 @@ fun ClassroomChatScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    IconButton(onClick = onViewRoomFilesClick) {
+                        Icon(Icons.Default.Folder, contentDescription = "Room Files")
+                    }
                 }
             )
         }
@@ -78,7 +99,7 @@ fun ClassroomChatScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No messages in this classroom yet. Send a message to start chatting with peers!",
+                        text = "No messages in this classroom yet. Send a message, upload a file, or paste text to share with peers!",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -102,35 +123,45 @@ fun ClassroomChatScreen(
                 tonalElevation = 3.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = textInput,
-                        onValueChange = { textInput = it },
-                        placeholder = { Text("Type a message...") },
-                        modifier = Modifier.weight(1f),
-                        maxLines = 4,
-                        shape = RoundedCornerShape(24.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    IconButton(
-                        onClick = {
-                            val trimmed = textInput.trim()
-                            if (trimmed.isNotEmpty()) {
-                                onSendMessage(trimmed)
-                                textInput = ""
-                            }
-                        },
-                        enabled = textInput.isNotBlank(),
-                        colors = IconButtonDefaults.filledIconButtonColors()
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Send, contentDescription = "Send")
+                        IconButton(onClick = { filePickerLauncher.launch(arrayOf("*/*")) }) {
+                            Icon(Icons.Default.AttachFile, contentDescription = "Upload File", tint = MaterialTheme.colorScheme.primary)
+                        }
+
+                        IconButton(onClick = onPasteTextClick) {
+                            Icon(Icons.Default.NoteAdd, contentDescription = "Paste Text", tint = MaterialTheme.colorScheme.primary)
+                        }
+
+                        OutlinedTextField(
+                            value = textInput,
+                            onValueChange = { textInput = it },
+                            placeholder = { Text("Type a message...") },
+                            modifier = Modifier.weight(1f),
+                            maxLines = 4,
+                            shape = RoundedCornerShape(24.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        IconButton(
+                            onClick = {
+                                val trimmed = textInput.trim()
+                                if (trimmed.isNotEmpty()) {
+                                    onSendMessage(trimmed)
+                                    textInput = ""
+                                }
+                            },
+                            enabled = textInput.isNotBlank(),
+                            colors = IconButtonDefaults.filledIconButtonColors()
+                        ) {
+                            Icon(Icons.Default.Send, contentDescription = "Send")
+                        }
                     }
                 }
             }

@@ -61,7 +61,7 @@ fun QrScanScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Scan Classroom QR") },
+                title = { Text("Scan Room QR") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -170,7 +170,7 @@ fun QrScanScreen(
                 }
 
                 Text(
-                    text = "Point camera at classroom host QR code",
+                    text = "Point camera at host Room QR code",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White,
                     modifier = Modifier

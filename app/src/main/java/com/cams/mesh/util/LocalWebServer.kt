@@ -176,7 +176,7 @@ class LocalWebServer(
         val bodyString = String(bodyBytes, Charsets.ISO_8859_1)
         val parts = bodyString.split("--$boundary")
 
-        var title = "Teacher Material"
+        var title = "External Material"
         var noteText = ""
         var fileName = ""
         var fileData: ByteArray? = null
@@ -216,7 +216,7 @@ class LocalWebServer(
                     val entity = MaterialEntity(
                         materialId = materialId,
                         sessionId = null,
-                        title = if (title.isNotBlank() && title != "Teacher Material") title else fileName,
+                        title = if (title.isNotBlank() && title != "External Material") title else fileName,
                         contentType = "FILE",
                         mimeType = getMimeType(fileName),
                         originalFileName = fileName,
@@ -224,8 +224,8 @@ class LocalWebServer(
                         textContent = null,
                         fileSizeBytes = fileData.size.toLong(),
                         sha256Hash = hash,
-                        uploaderDeviceId = "teacher_web",
-                        uploaderDisplayName = "Teacher (Web Portal)",
+                        uploaderDeviceId = "external_web",
+                        uploaderDisplayName = "External User (Web Portal)",
                         createdAt = System.currentTimeMillis(),
                         receivedAt = System.currentTimeMillis(),
                         isUploadedByLocalUser = true,
@@ -240,8 +240,8 @@ class LocalWebServer(
                         title = title,
                         content = noteText,
                         sessionId = null,
-                        localDeviceId = "teacher_web",
-                        localDisplayName = "Teacher (Web Portal)"
+                        localDeviceId = "external_web",
+                        localDisplayName = "External User (Web Portal)"
                     )
                     onMaterialUploaded(material)
                 }
@@ -258,16 +258,18 @@ class LocalWebServer(
                 <title>Uploaded Successfully - CAMS-MESH</title>
                 <style>
                     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0fdf4; color: #166534; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
-                    .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); text-align: center; max-width: 420px; width: 100%; }
+                    .card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); text-align: center; max-width: 440px; width: 100%; }
                     h2 { color: #15803d; margin-top: 0; }
                     p { color: #374151; font-size: 15px; line-height: 1.5; }
-                    a { display: inline-block; margin-top: 20px; background: #2563eb; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; }
+                    .credit { font-weight: bold; color: #1e3a8a; margin-top: 16px; font-size: 14px; }
+                    a { display: inline-block; margin-top: 24px; background: #2563eb; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; }
                 </style>
             </head>
             <body>
                 <div class="card">
                     <h2>✓ Material Uploaded!</h2>
-                    <p>Your material has been received by the classroom node and is automatically distributing across all student devices offline.</p>
+                    <p>Your content has been received and uploaded to CAMS-MESH.</p>
+                    <div class="credit">CAMS-MESH an app built by OKASHA NADEEM</div>
                     <a href="/">Upload Another File</a>
                 </div>
             </body>
@@ -283,7 +285,7 @@ class LocalWebServer(
             <html>
             <head>
                 <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>Teacher Material Upload - CAMS-MESH</title>
+                <title>External User Material Upload - CAMS-MESH</title>
                 <style>
                     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 20px; }
                     .container { max-width: 500px; margin: 20px auto; background: white; padding: 28px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
@@ -299,21 +301,21 @@ class LocalWebServer(
             </head>
             <body>
                 <div class="container">
-                    <span class="badge">Offline Classroom Mesh</span>
-                    <h1>Upload Teaching Materials</h1>
-                    <p>No app installation required. Any file (PDF, slide, doc, picture) or text note uploaded here is instantly shared to all students in the classroom mesh.</p>
+                    <span class="badge">Offline Mesh Network</span>
+                    <h1>External User Upload</h1>
+                    <p>No app installation required. Any file (PDF, slide, doc, picture) or text note uploaded here is instantly shared across the mesh.</p>
                     
                     <form action="/upload" method="post" enctype="multipart/form-data">
                         <label for="title">Title (Optional)</label>
-                        <input type="text" id="title" name="title" placeholder="e.g. Chapter 4 Lecture Notes">
+                        <input type="text" id="title" name="title" placeholder="e.g. Lecture Notes">
 
                         <label for="file">Select File</label>
                         <input type="file" id="file" name="file">
 
-                        <label for="note">Or Paste Text / Assignment</label>
+                        <label for="note">Or Paste Text / Note</label>
                         <textarea id="note" name="note" rows="4" placeholder="Type or paste questions, instructions, or notes here..."></textarea>
 
-                        <button type="submit">Broadcast to Students</button>
+                        <button type="submit">Broadcast to Users</button>
                     </form>
                 </div>
             </body>

@@ -28,6 +28,13 @@ sealed class NetworkStatus {
     data class Error(val message: String) : NetworkStatus()
 }
 
+data class DiscoveredRoom(
+    val endpointId: String,
+    val roomCode: String,
+    val roomName: String,
+    val hostDisplayName: String
+)
+
 class NearbyMeshManager(
     private val context: Context,
     private val materialRepository: MaterialRepository,
@@ -43,6 +50,9 @@ class NearbyMeshManager(
     private val _networkStatus = MutableStateFlow<NetworkStatus>(NetworkStatus.Idle)
     val networkStatus: StateFlow<NetworkStatus> = _networkStatus
 
+    private val _nearbyPublicRooms = MutableStateFlow<List<DiscoveredRoom>>(emptyList())
+    val nearbyPublicRooms: StateFlow<List<DiscoveredRoom>> = _nearbyPublicRooms
+
     // Active connections: endpointId -> Peer info
     private val connectedEndpoints = mutableMapOf<String, PeerInfo>()
     // Tracking incoming file payloads: payloadId -> IncomingTransferInfo
@@ -54,8 +64,23 @@ class NearbyMeshManager(
     val activeSession: StateFlow<SessionEntity?> = _activeSession
     val currentSession: SessionEntity? get() = _activeSession.value
 
-    var localDeviceId: String = UUID.randomUUID().toString()
-    var localDisplayName: String = "Student"
+    private val prefs = context.getSharedPreferences("cams_mesh_prefs", Context.MODE_PRIVATE)
+
+    var localDeviceId: String
+        get() = prefs.getString("local_device_id", null) ?: run {
+            val newId = UUID.randomUUID().toString()
+            prefs.edit().putString("local_device_id", newId).apply()
+            newId
+        }
+        set(value) {
+            prefs.edit().putString("local_device_id", value).apply()
+        }
+
+    var localDisplayName: String
+        get() = prefs.getString("local_display_name", "Student") ?: "Student"
+        set(value) {
+            prefs.edit().putString("local_display_name", value).apply()
+        }
 
     data class PeerInfo(
         val endpointId: String,
@@ -199,35 +224,122 @@ class NearbyMeshManager(
         }
     }
 
+    companion object {
+        const val PUBLIC_SERVICE_ID = "com.cams.mesh.public"
+        private const val PUBLIC_PREFIX = "CAMS_PUB"
+    }
+
     fun startAdvertisingSession(session: SessionEntity) {
+        // Stop any active advertising/discovery/endpoints before advertising a new room
+        connectionsClient.stopAdvertising()
+        connectionsClient.stopDiscovery()
+        connectionsClient.stopAllEndpoints()
+        connectedEndpoints.clear()
+
         _activeSession.value = session
         val options = AdvertisingOptions.Builder()
             .setStrategy(Strategy.P2P_CLUSTER) // PRD: P2P Cluster mesh topology
             .build()
 
-        val serviceId = "com.cams.mesh.${session.roomCode}"
+        // If public/visible to all, advertise on public service ID with room metadata in endpoint name
+        // Format: CAMS_PUB:<roomCode>:<roomName>:<displayName>
+        // Otherwise, advertise purely on private roomCode service ID
+        val serviceId: String
+        val advertisingName: String
+
+        if (session.isVisibleToAll) {
+            serviceId = PUBLIC_SERVICE_ID
+            val safeName = session.sessionName.ifEmpty { "Room" }.replace(":", " ")
+            val safeHost = localDisplayName.replace(":", " ")
+            advertisingName = "$PUBLIC_PREFIX:${session.roomCode}:$safeName:$safeHost"
+        } else {
+            serviceId = "com.cams.mesh.${session.roomCode}"
+            advertisingName = localDisplayName
+        }
+
         connectionsClient.startAdvertising(
-            localDisplayName,
+            advertisingName,
             serviceId,
             connectionLifecycleCallback,
             options
         ).addOnSuccessListener {
             _networkStatus.value = NetworkStatus.Advertising(session.roomCode)
         }.addOnFailureListener { e ->
-            _networkStatus.value = NetworkStatus.Error(e.message ?: "Advertising failed")
+            val msg = if (e.message?.contains("8034") == true || e.message?.contains("MISSING_PERMISSION") == true) {
+                "Location or Nearby Devices permission missing. Please grant permissions."
+            } else if (e.message?.contains("8001") == true || e.message?.contains("STATUS_ALREADY_ADVERTISING") == true) {
+                "Already advertising room ${session.roomCode}"
+            } else {
+                e.message ?: "Advertising failed"
+            }
+            if (e.message?.contains("8001") == true || e.message?.contains("STATUS_ALREADY_ADVERTISING") == true) {
+                _networkStatus.value = NetworkStatus.Advertising(session.roomCode)
+            } else {
+                _networkStatus.value = NetworkStatus.Error(msg)
+            }
         }
     }
 
-    fun startDiscoverySession(roomCode: String) {
+    fun startPublicRoomDiscovery() {
+        val options = DiscoveryOptions.Builder()
+            .setStrategy(Strategy.P2P_CLUSTER)
+            .build()
+
+        val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
+            override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
+                val endpointName = info.endpointName
+                if (endpointName.startsWith("$PUBLIC_PREFIX:")) {
+                    val parts = endpointName.split(":")
+                    if (parts.size >= 4) {
+                        val roomCode = parts[1]
+                        val roomName = parts[2]
+                        val hostName = parts[3]
+                        val room = DiscoveredRoom(
+                            endpointId = endpointId,
+                            roomCode = roomCode,
+                            roomName = roomName,
+                            hostDisplayName = hostName
+                        )
+                        _nearbyPublicRooms.value = _nearbyPublicRooms.value
+                            .filter { it.endpointId != endpointId && it.roomCode != roomCode } + room
+                    }
+                }
+            }
+
+            override fun onEndpointLost(endpointId: String) {
+                _nearbyPublicRooms.value = _nearbyPublicRooms.value.filter { it.endpointId != endpointId }
+            }
+        }
+
+        connectionsClient.startDiscovery(
+            PUBLIC_SERVICE_ID,
+            endpointDiscoveryCallback,
+            options
+        ).addOnFailureListener { e ->
+            // If discovery fails, clear list
+            _nearbyPublicRooms.value = emptyList()
+        }
+    }
+
+    fun stopPublicRoomDiscovery() {
+        connectionsClient.stopDiscovery()
+        _nearbyPublicRooms.value = emptyList()
+    }
+
+    fun startDiscoverySession(roomCode: String, customSessionName: String? = null) {
+        // First ensure any public scanning stops
+        connectionsClient.stopDiscovery()
+
         coroutineScope.launch {
             val existing = sessionDao.getSessionByRoomCode(roomCode)
             val session = existing ?: SessionEntity(
                 sessionId = UUID.randomUUID().toString(),
                 roomCode = roomCode,
-                sessionName = "Classroom $roomCode",
+                sessionName = customSessionName ?: "Room $roomCode",
                 creatorDeviceId = "remote",
                 createdAt = System.currentTimeMillis(),
                 sessionState = "ACTIVE",
+                isVisibleToAll = true,
                 approvalMode = false,
                 lastSeenAt = System.currentTimeMillis()
             )
@@ -239,6 +351,7 @@ class NearbyMeshManager(
             .setStrategy(Strategy.P2P_CLUSTER)
             .build()
 
+        // We check discovery on either private roomCode service ID or public service ID
         val serviceId = "com.cams.mesh.$roomCode"
         val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
             override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
@@ -258,8 +371,64 @@ class NearbyMeshManager(
             options
         ).addOnSuccessListener {
             _networkStatus.value = NetworkStatus.Discovering(roomCode)
-        }.addOnFailureListener { e ->
-            _networkStatus.value = NetworkStatus.Error(e.message ?: "Discovery failed")
+        }.addOnFailureListener {
+            // Also try discovering on public service ID if targeted room is a public room
+            connectionsClient.startDiscovery(
+                PUBLIC_SERVICE_ID,
+                object : EndpointDiscoveryCallback() {
+                    override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
+                        if (info.endpointName.contains(roomCode)) {
+                            connectionsClient.requestConnection(
+                                localDisplayName,
+                                endpointId,
+                                connectionLifecycleCallback
+                            )
+                        }
+                    }
+
+                    override fun onEndpointLost(endpointId: String) {}
+                },
+                options
+            ).addOnSuccessListener {
+                _networkStatus.value = NetworkStatus.Discovering(roomCode)
+            }.addOnFailureListener { err ->
+                val msg = if (err.message?.contains("8034") == true || err.message?.contains("MISSING_PERMISSION") == true) {
+                    "Location or Nearby Devices permission missing. Please grant permissions."
+                } else {
+                    err.message ?: "Discovery failed"
+                }
+                _networkStatus.value = NetworkStatus.Error(msg)
+            }
+        }
+    }
+
+    fun connectToDiscoveredRoom(room: DiscoveredRoom) {
+        connectionsClient.stopDiscovery()
+        coroutineScope.launch {
+            val existing = sessionDao.getSessionByRoomCode(room.roomCode)
+            val session = existing ?: SessionEntity(
+                sessionId = UUID.randomUUID().toString(),
+                roomCode = room.roomCode,
+                sessionName = room.roomName.ifEmpty { "Room ${room.roomCode}" },
+                creatorDeviceId = "remote",
+                createdAt = System.currentTimeMillis(),
+                sessionState = "ACTIVE",
+                isVisibleToAll = true,
+                approvalMode = false,
+                lastSeenAt = System.currentTimeMillis()
+            )
+            sessionDao.insertSession(session)
+            _activeSession.value = session
+        }
+
+        _networkStatus.value = NetworkStatus.Discovering(room.roomCode)
+        connectionsClient.requestConnection(
+            localDisplayName,
+            room.endpointId,
+            connectionLifecycleCallback
+        ).addOnFailureListener { e ->
+            // If direct endpoint connection failed (e.g. lost/stale), fall back to discovering that room code
+            startDiscoverySession(room.roomCode, room.roomName)
         }
     }
 
@@ -269,6 +438,7 @@ class NearbyMeshManager(
         connectionsClient.stopAllEndpoints()
         connectedEndpoints.clear()
         incomingFilePayloads.clear()
+        _nearbyPublicRooms.value = emptyList()
         _activeSession.value = null
         _networkStatus.value = NetworkStatus.Idle
     }
@@ -291,6 +461,7 @@ class NearbyMeshManager(
                             roomCode = session.roomCode,
                             sessionName = session.sessionName,
                             creatorDeviceId = session.creatorDeviceId,
+                            isVisibleToAll = session.isVisibleToAll,
                             approvalMode = session.approvalMode
                         )
                         val msg = MeshMessage(
@@ -322,6 +493,7 @@ class NearbyMeshManager(
                             creatorDeviceId = info.creatorDeviceId,
                             createdAt = existing?.createdAt ?: System.currentTimeMillis(),
                             sessionState = "ACTIVE",
+                            isVisibleToAll = info.isVisibleToAll,
                             approvalMode = info.approvalMode,
                             lastSeenAt = System.currentTimeMillis()
                         )
@@ -388,6 +560,22 @@ class NearbyMeshManager(
                             uploaderName = record.uploaderDisplayName,
                             createdAt = record.createdAt
                         )
+                        // Post notification in room chat that file was uploaded and can be viewed in files
+                        val uploaderName = if (record.uploaderDeviceId == "external_web" || record.uploaderDeviceId == "teacher_web") {
+                            "External User"
+                        } else {
+                            record.uploaderDisplayName
+                        }
+                        val chatEntity = ChatMessageEntity(
+                            messageId = UUID.randomUUID().toString(),
+                            sessionId = message.sessionId,
+                            senderDeviceId = record.uploaderDeviceId,
+                            senderDisplayName = uploaderName,
+                            text = "$uploaderName has uploaded a file please view it in files",
+                            timestamp = record.createdAt,
+                            isFromMe = false
+                        )
+                        chatDao.insertMessage(chatEntity)
                     }
                 }
                 "REQUEST_ITEM" -> {
@@ -449,6 +637,7 @@ class NearbyMeshManager(
                 roomCode = session.roomCode,
                 sessionName = session.sessionName,
                 creatorDeviceId = session.creatorDeviceId,
+                isVisibleToAll = session.isVisibleToAll,
                 approvalMode = session.approvalMode
             )
             val infoMsg = MeshMessage(
