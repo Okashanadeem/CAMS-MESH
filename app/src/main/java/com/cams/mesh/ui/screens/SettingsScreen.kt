@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     displayName: String,
     autoFocusName: Boolean = false,
+    totalStorageBytes: Long = 0L,
     onDisplayNameChange: (String) -> Unit,
     onClearAllData: () -> Unit
 ) {
@@ -27,6 +28,10 @@ fun SettingsScreen(
     }
     var showClearDialog by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+
+    val formattedStorage = remember(totalStorageBytes) {
+        formatStorageSize(totalStorageBytes)
+    }
 
     LaunchedEffect(autoFocusName) {
         if (autoFocusName) {
@@ -69,6 +74,38 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Storage Acquired",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Includes all materials, cache, files & database",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = formattedStorage,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
 
             HorizontalDivider()
 
@@ -120,4 +157,13 @@ fun SettingsScreen(
             }
         )
     }
+}
+
+private fun formatStorageSize(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB")
+    val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
+    val index = digitGroups.coerceIn(0, units.size - 1)
+    val value = bytes / Math.pow(1024.0, index.toDouble())
+    return String.format(java.util.Locale.US, "%.1f %s", value, units[index])
 }

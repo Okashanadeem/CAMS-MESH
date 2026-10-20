@@ -503,6 +503,12 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 },
+                                onDeleteExternalMaterial = { id ->
+                                    lifecycleScope.launch {
+                                        app.materialRepository.deleteLocalCopy(id, app.nearbyMeshManager.localDeviceId)
+                                        Toast.makeText(this@MainActivity, "Removed from portal", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
                                 onMaterialClick = { id -> navController.navigate("detail/$id") },
                                 onBackClick = { navController.popBackStack() }
                             )
@@ -630,9 +636,16 @@ class MainActivity : ComponentActivity() {
                             )
                         ) { backStackEntry ->
                             val shouldFocus = backStackEntry.arguments?.getBoolean("focus") ?: false
+                            var totalStorageBytes by remember { mutableStateOf(0L) }
+
+                            LaunchedEffect(Unit) {
+                                totalStorageBytes = app.materialRepository.getTotalStorageBytes()
+                            }
+
                             SettingsScreen(
                                 displayName = displayName,
                                 autoFocusName = shouldFocus,
+                                totalStorageBytes = totalStorageBytes,
                                 onDisplayNameChange = {
                                     displayName = it
                                     app.nearbyMeshManager.localDisplayName = it
@@ -641,6 +654,7 @@ class MainActivity : ComponentActivity() {
                                     lifecycleScope.launch {
                                         app.nearbyMeshManager.stopAllNetworking()
                                         app.materialRepository.clearAllData()
+                                        totalStorageBytes = app.materialRepository.getTotalStorageBytes()
                                         Toast.makeText(this@MainActivity, "All local data cleared successfully", Toast.LENGTH_SHORT).show()
                                     }
                                 }

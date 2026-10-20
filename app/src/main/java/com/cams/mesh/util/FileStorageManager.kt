@@ -91,6 +91,25 @@ class FileStorageManager(private val context: Context) {
         return success
     }
 
+    fun getTotalStorageUsageBytes(): Long {
+        var total = 0L
+        fun addDirSize(dir: File?) {
+            if (dir == null || !dir.exists()) return
+            dir.walkTopDown().forEach { file ->
+                if (file.isFile) {
+                    total += file.length()
+                }
+            }
+        }
+        addDirSize(materialsDir)
+        addDirSize(tempDir)
+        // Also include database directory and filesDir
+        addDirSize(context.filesDir)
+        addDirSize(context.cacheDir)
+        context.getDatabasePath("cams_mesh_db")?.parentFile?.let { addDirSize(it) }
+        return total
+    }
+
     fun getMimeType(fileName: String): String {
         val extension = MimeTypeMap.getFileExtensionFromUrl(fileName).lowercase(Locale.ROOT)
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "application/octet-stream"

@@ -221,4 +221,10 @@ class MaterialRepository(
         tombstoneDao.clearAllTombstones()
         return true
     }
+
+    suspend fun getTotalStorageBytes(): Long {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            fileStorage.getTotalStorageUsageBytes()
+        }
+    }
 }

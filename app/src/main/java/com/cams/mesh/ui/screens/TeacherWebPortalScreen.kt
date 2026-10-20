@@ -33,6 +33,7 @@ fun TeacherWebPortalScreen(
     onToggleServer: (Boolean) -> Unit,
     onUploadFileToPortal: (Uri) -> Unit,
     onPostTextToPortal: (String, String) -> Unit,
+    onDeleteExternalMaterial: (String) -> Unit = {},
     onMaterialClick: (String) -> Unit,
     onBackClick: () -> Unit
 ) {
@@ -259,10 +260,25 @@ fun TeacherWebPortalScreen(
                 }
             } else {
                 items(externalMaterials, key = { it.materialId }) { material ->
-                    MaterialCard(
-                        material = material,
-                        onClick = { onMaterialClick(material.materialId) }
-                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        MaterialCard(
+                            material = material,
+                            onClick = { onMaterialClick(material.materialId) }
+                        )
+                        IconButton(
+                            onClick = { onDeleteExternalMaterial(material.materialId) },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete upload",
+                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
             }
 

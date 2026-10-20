@@ -140,6 +140,8 @@ class LocalWebServer(
                     handlePostUpload(contentType, contentLength, input, output)
                 } else if (method.equals("GET", ignoreCase = true) && path.startsWith("/download")) {
                     handleDownload(path, output)
+                } else if ((method.equals("POST", ignoreCase = true) || method.equals("GET", ignoreCase = true)) && path.startsWith("/delete")) {
+                    handleDeleteMaterial(path, output)
                 } else {
                     servePortalHtml(output)
                 }
@@ -356,6 +358,41 @@ class LocalWebServer(
         }
     }
 
+    private fun handleDeleteMaterial(path: String, output: OutputStream) {
+        try {
+            val query = if (path.contains("?")) path.substringAfter("?") else ""
+            val id = query.split("&")
+                .firstOrNull { it.startsWith("id=") }
+                ?.substringAfter("id=")
+                ?.trim() ?: ""
+
+            if (id.isBlank()) {
+                sendResponse(output, 400, "text/plain", "Missing id parameter".toByteArray())
+                return
+            }
+
+            kotlinx.coroutines.runBlocking {
+                val material = materialRepository.getMaterialById(id)
+                if (material != null) {
+                    materialRepository.deleteLocalCopy(id, "external_web")
+                }
+            }
+
+            // Redirect back to home
+            val redirectHeader = "HTTP/1.1 303 See Other\r\n" +
+                    "Location: /\r\n" +
+                    "Content-Length: 0\r\n" +
+                    "Connection: close\r\n\r\n"
+            output.write(redirectHeader.toByteArray(Charsets.UTF_8))
+            output.flush()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            try {
+                sendResponse(output, 500, "text/plain", "Internal server error".toByteArray())
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun servePortalHtml(output: OutputStream) {
         val activeMaterials = try {
             kotlinx.coroutines.runBlocking {
@@ -395,7 +432,10 @@ class LocalWebServer(
                     val ellipsis = if (m.textContent.length > 280) "..." else ""
                     materialsHtml.append("""
                         <div class="card-preview">$preview$ellipsis</div>
-                        <a href="/download?id=${m.materialId}" class="btn btn-outline" download="${titleEscaped}.txt">Download Note</a>
+                        <div class="card-actions">
+                            <a href="/download?id=${m.materialId}" class="btn btn-outline" download="${titleEscaped}.txt">Download Note</a>
+                            <a href="/delete?id=${m.materialId}" class="btn btn-danger" onclick="return confirm('Are you sure you want to remove this item?')">Remove</a>
+                        </div>
                     """.trimIndent())
                 } else {
                     val sizeStr = formatFileSize(m.fileSizeBytes)
@@ -405,7 +445,10 @@ class LocalWebServer(
                             <span>$fileName</span>
                             <span class="file-size">$sizeStr</span>
                         </div>
-                        <a href="/download?id=${m.materialId}" class="btn btn-primary" download>Download File</a>
+                        <div class="card-actions">
+                            <a href="/download?id=${m.materialId}" class="btn btn-primary" download>Download File</a>
+                            <a href="/delete?id=${m.materialId}" class="btn btn-danger" onclick="return confirm('Are you sure you want to remove this file?')">Remove</a>
+                        </div>
                     """.trimIndent())
                 }
 
@@ -552,6 +595,26 @@ class LocalWebServer(
                     }
                     .btn-outline:hover {
                         background: #e2e8f0;
+                    }
+                    .btn-danger {
+                        background: #fee2e2;
+                        color: #dc2626;
+                        border: 1px solid #fecaca;
+                        padding: 10px 14px;
+                    }
+                    .btn-danger:hover {
+                        background: #fecaca;
+                    }
+                    .card-actions {
+                        display: flex;
+                        gap: 8px;
+                        align-items: center;
+                    }
+                    .card-actions .btn {
+                        flex: 1;
+                    }
+                    .card-actions .btn-danger {
+                        flex: 0 0 auto;
                     }
                     .material-grid {
                         display: flex;
